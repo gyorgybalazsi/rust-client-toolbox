@@ -1,0 +1,6 @@
+**/.DS_Store
+**/target
+**/.daml
+**/log
+event-graph/neo4j/
+.venv
