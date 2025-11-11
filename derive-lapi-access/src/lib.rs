@@ -63,32 +63,6 @@ fn snake_to_camel(s: &str) -> String {
     result
 }
 
-fn camel_to_snake(s: &str) -> String {
-    let mut result = String::new();
-    let mut prev_is_underscore = false;
-    for (i, c) in s.chars().enumerate() {
-        if c == '_' {
-            // Already snake_case, preserve underscores and avoid double underscores
-            if !prev_is_underscore {
-                result.push('_');
-                prev_is_underscore = true;
-            }
-        } else {
-            if c.is_uppercase() {
-                if i != 0 && !prev_is_underscore {
-                    result.push('_');
-                }
-                result.push(c.to_ascii_lowercase());
-                prev_is_underscore = false;
-            } else {
-                result.push(c);
-                prev_is_underscore = false;
-            }
-        }
-    }
-    result
-}
-
 #[proc_macro_derive(LapiAccess)]
 pub fn derive_lapi_access(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -280,7 +254,6 @@ fn test() {
         }
     };
     let ast: DeriveInput = syn::parse2(ts).unwrap();
-    let name = &ast.ident;
 
     let fields = match &ast.data {
         Data::Struct(data_struct) => match &data_struct.fields {

@@ -1,14 +1,14 @@
 [workspace]
 resolver = "3"
 members = [
-    "client", "codegen",
+    "client", 
+    "codegen",
     "ledger-explorer",
     "ledger-api",
     "daml-type-rep",
     "derive-lapi-access",
     "wallet",
-    "test"
-]
+    "test"]
 
 [workspace.dependencies]
 tonic = { version = "0.13.1", features = ["transport"] }
@@ -39,3 +39,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 nix = { version = "0.30.1", features = ["signal"] }
 regex = "1.10.4"
+toml = "0.7"

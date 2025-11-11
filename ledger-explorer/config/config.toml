@@ -1,0 +1,8 @@
+[neo4j]
+uri="neo4j://127.0.0.1:7687"
+user="neo4j"
+password="supersafe"
+
+[ledger]
+party="Alice::1220963664435299d765314f45fd6631dbb42baa34f1aa739af57717d73d09dbe5e6"
+url="http://localhost:6865"

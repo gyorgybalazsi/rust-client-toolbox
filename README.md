@@ -18,7 +18,7 @@ Main features planned:
 
 ## Prerequisits
 
-DAMl SDK, version `3.4.0-snapshot.20251006.0`
+DAMl SDK, version `3.4.0-rc2`
 
 [The Protocol Buffer Compiler (protoc)](https://protobuf.dev/installation/)
 
@@ -27,7 +27,7 @@ The `.vscode/settings.json` file should contain the following:
 ```
 {
     "rust-analyzer.server.extraEnv": {
-        "PROTOC": "/opt/homebrew/bin/protoc"
+        "PROTOC": "/usr/local/bin/protoc"
     }
 }
 ```

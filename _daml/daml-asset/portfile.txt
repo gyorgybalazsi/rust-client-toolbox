@@ -1,7 +1,0 @@
-{
-  "sandbox" : {
-    "ledgerApi" : 6865,
-    "adminApi" : 6866,
-    "jsonApi" : null
-  }
-}
