@@ -2,7 +2,7 @@
 
 ## Supported Daml SDK
 
-This app was tested with sdk-version 3.4.0-rc2
+This app was tested with sdk-version 3.4.8
 
 The ledger sync uses ledger API v2.
 

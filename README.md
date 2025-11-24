@@ -18,7 +18,7 @@ Main features planned:
 
 ## Prerequisits
 
-DAMl SDK, version `3.4.0-rc2`
+DAMl SDK, version `3.4.8`
 
 [The Protocol Buffer Compiler (protoc)](https://protobuf.dev/installation/)
 
