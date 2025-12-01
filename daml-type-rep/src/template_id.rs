@@ -1,5 +1,6 @@
 use ledger_api::v2::Identifier;
 
+#[derive(Clone)]
 pub struct TemplateId(String, String, String);
 
 impl TemplateId {
