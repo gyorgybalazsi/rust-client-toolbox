@@ -30,8 +30,6 @@ pub async fn daml_start(package_root: PathBuf, sandbox_port: u16) -> Result<Sand
                 &sequencer_admin_port.to_string(),
                 "--sandbox-mediator-admin-port",
                 &mediator_port.to_string(),
-                "--json-api-port",
-                "none",
             ])
             .current_dir(&package_root)
             .stdout(Stdio::piped())

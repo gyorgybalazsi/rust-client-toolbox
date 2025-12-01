@@ -1,6 +1,7 @@
 /// Rust equivalents for Daml built-in types as structs
 use std::fmt;
 use rust_decimal::prelude::FromPrimitive;
+use std::fmt::Display;
 
 pub trait DamlValue {} // Marker trait for all Daml value types
 
@@ -178,6 +179,12 @@ impl<V: DamlValue> DamlValue for DamlTextMap<V> {}
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Clone, serde::Serialize)]
 pub struct DamlParty {
     pub party_id: String,
+}
+
+impl Display for DamlParty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.party_id)
+    }
 }
 
 impl DamlParty {

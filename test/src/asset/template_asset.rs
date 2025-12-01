@@ -13,25 +13,23 @@ use ledger_api::v2::{
     command_service_client::CommandServiceClient, value::Sum,
 };
 use tracing::info;
+pub use submit::create_contract::create_contract;
 
 pub async fn create_asset(
     command_service_client: &mut CommandServiceClient<tonic::transport::Channel>,
     access_token: Option<&str>,
     user_id: Option<&str>,
     package_id: String,
-    issuer: String,
-    owner: String,
-    name: String,
+    payload: Asset,
 ) -> Result<String> {
+    let act_as = payload.issuer.to_string();
     let create_asset_command = CreateCommand {
         template_id: Some(TemplateId::new(&package_id, "Main", "Asset").to_template_id()),
-        create_arguments: Some(
-            Asset::new(issuer.clone(), owner.clone(), name.clone()).to_create_arguments(),
-        ),
+        create_arguments: Some(payload.to_create_arguments()),
     };
 
     let commands = Commands {
-        act_as: vec![issuer.clone()],
+        act_as: vec![act_as],
         commands: vec![Command {
             command: Some(ledger_api::v2::command::Command::Create(
                 create_asset_command,
@@ -193,9 +191,75 @@ mod tests {
     use tracing_subscriber::EnvFilter;
 
     #[tokio::test]
+    async fn test_create_contract() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new("debug"))
+            .pretty()
+            .try_init()
+            .ok();
+        let sandbox_port = 6865;
+        let url = format!("http://localhost:{}", sandbox_port);
+        let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let package_root = std::path::PathBuf::from(&crate_root)
+            .join("..")
+            .join("_daml")
+            .join("daml-asset")
+            .canonicalize()
+            .expect("Failed to canonicalize package_root");
+
+        info!("Starting DAML sandbox at {}", package_root.display());
+
+        let _guard = daml_start(package_root, sandbox_port).await?;
+
+        // Setup test values
+        let package_id = "#daml-asset".to_string();
+        let alice_user = "alice_user";
+        let alice_token = fake_jwt_for_user(alice_user);
+        let alice_parties =
+            get_parties(url.clone(), Some(&alice_token), Some("Alice".to_string())).await?;
+        let alice_party = alice_parties.get(0).cloned().unwrap();
+
+        // Connect to ledger
+        let channel = tonic::transport::Channel::from_shared(url)
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let mut command_service_client = CommandServiceClient::new(channel);
+
+        // Create asset using the generic create_contract function
+        let asset = Asset::new(
+            alice_party.clone(), // issuer
+            alice_party.clone(), // owner
+            "Test asset".to_string(),
+        );
+        let template_id = TemplateId::new(&package_id, "Main", "Asset");
+        let create_result = create_contract(
+            &mut command_service_client,
+            Some(alice_token.as_str()),
+            Some(alice_user),
+            vec![alice_party.clone()],
+            template_id,
+            asset,
+        )
+        .await;
+
+        assert!(
+            create_result.is_ok(),
+            "Contract creation failed: {:?}",
+            create_result
+        );
+        let created_contract_id = create_result.unwrap();
+        info!("Created contract with id: {}", created_contract_id);
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_create_and_give_asset_simple() -> Result<()> {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("debug")) // or "debug", "trace", etc.
+            .pretty()
             .init();
         let sandbox_port = 6865;
         let url = format!("http://localhost:{}", sandbox_port);
@@ -233,14 +297,17 @@ mod tests {
         let mut command_service_client = CommandServiceClient::new(channel);
 
         // Create asset
+        let asset = Asset::new(
+            alice_party.clone(), // issuer
+            alice_party.clone(), // owner
+            "Test asset".to_string(),
+        );
         let create_result = create_asset(
             &mut command_service_client,
             Some(alice_token.as_str()),
             Some(alice_user),
             package_id.clone(),
-            alice_party.clone(), // issuer
-            alice_party.clone(), // owner
-            "Test asset".to_string(),
+            asset,
         )
         .await;
 

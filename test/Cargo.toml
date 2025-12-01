@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+submit = { path = "../submit" }
 client = { path = "../client" }
 ledger-api = { path = "../ledger-api" }
 daml-type-rep = { path = "../daml-type-rep" }
