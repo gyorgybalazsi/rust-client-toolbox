@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use client::submit_commands::CommandResult;
 use client::submit_commands::submit_commands;
 use daml_type_rep::lapi_access::LapiAccess;
@@ -17,7 +17,7 @@ pub async fn exercise_choice<T: LapiAccess>(
     contract_id: String,
     choice: &str,
     choice_argument: T,
-) -> Result<String> {
+) -> Result<Vec<String>> {
     let exercise_command = ExerciseCommand {
         template_id: Some(template_id.to_template_id()),
         contract_id,
@@ -48,14 +48,7 @@ pub async fn exercise_choice<T: LapiAccess>(
         })
         .collect::<Vec<_>>();
 
-    if contract_ids.len() == 1 {
-        Ok(contract_ids[0].clone())
-    } else {
-        Err(anyhow!(
-            "Expected exactly one contract id, found {}",
-            contract_ids.len()
-        ))
-    }
+    Ok(contract_ids)
 }
 
 #[cfg(test)]
@@ -150,8 +143,6 @@ mod tests {
         .await;
 
         assert!(give_result.is_ok(), "Give exercise failed: {:?}", give_result);
-        let given_contract_id = give_result.unwrap();
-        info!("Given contract with id: {}", given_contract_id);
 
         Ok(())
     }
