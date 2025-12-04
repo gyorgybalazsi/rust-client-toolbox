@@ -13,6 +13,7 @@ pub async fn exercise_choice<T: LapiAccess>(
     access_token: Option<&str>,
     user_id: Option<&str>,
     act_as: Vec<String>,
+    read_as: Vec<String>,
     template_id: TemplateId,
     contract_id: String,
     choice: &str,
@@ -28,6 +29,7 @@ pub async fn exercise_choice<T: LapiAccess>(
 
     let commands = Commands {
         act_as,
+        read_as,
         user_id: user_id.unwrap_or("").to_string(),
         commands: vec![Command {
             command: Some(ledger_api::v2::command::Command::Exercise(exercise_command)),
@@ -135,6 +137,7 @@ mod tests {
             Some(alice_token.as_str()),
             Some(alice_user),
             vec![alice_party.clone()],
+            vec![], // read_as
             template_id,
             created_contract_id,
             "Give",
