@@ -1,8 +1,15 @@
+[logging]
+level = "debug"
+
 [neo4j]
 uri="neo4j://127.0.0.1:7687"
 user="neo4j"
-password="supersafe"
+password="password"
 
 [ledger]
-party="Alice::1220963664435299d765314f45fd6631dbb42baa34f1aa739af57717d73d09dbe5e6"
+reader_user="all_reader_user"
+parties=[
+    "TicketWizard::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8",
+    "ScroogeBank::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8",
+    "Alice::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8"]
 url="http://localhost:6865"

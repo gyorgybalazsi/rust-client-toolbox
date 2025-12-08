@@ -3,12 +3,44 @@ use client::utils::{
     extract_contract_ids_from_value, extract_edges, structure_markers_from_transaction,
 };
 use ledger_api::v2::{GetUpdatesResponse, get_updates_response::Update, event::Event};
-use neo4rs::{Query, query};
+use neo4rs::Query;
 use crate::api_record_to_json::{api_record_to_json, choice_argument_json};
+
+/// Wrapper around neo4rs::Query that preserves the cypher string for debugging
+#[derive(Clone)]
+pub struct CypherQuery {
+    pub cypher: String,
+    pub query: Query,
+}
+
+impl std::fmt::Debug for CypherQuery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CypherQuery")
+            .field("cypher", &self.cypher)
+            .finish()
+    }
+}
+
+impl CypherQuery {
+    pub fn new(cypher: String) -> Self {
+        Self {
+            query: Query::new(cypher.clone()),
+            cypher,
+        }
+    }
+}
+
+macro_rules! cypher_query {
+    ($cypher:expr, $($key:ident = $value:expr),* $(,)?) => {{
+        let cypher_str = $cypher.to_string();
+        let query = ::neo4rs::query!($cypher, $($key = $value),*);
+        CypherQuery { cypher: cypher_str, query }
+    }};
+}
 
 /// Converts a GetUpdatesResponse directly into a Vec of Cypher statements.
 /// Returns an empty vector if update is None or not a Transaction.
-pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Query> {
+pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<CypherQuery> {
     let mut cypher_statements = Vec::new();
 
     let Some(update) = &response.update else {
@@ -57,7 +89,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Quer
                     .as_ref()
                     .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
                     .unwrap_or("null".to_string());
-                cypher_statements.push(query!(
+                cypher_statements.push(cypher_query!(
                     "CREATE (c:Created \
                     {{ contract_id: {contract_id}, \
                     template_name: {template_name}, \
@@ -103,7 +135,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Quer
                     .as_ref()
                     .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
                     .unwrap_or("null".to_string());
-                cypher_statements.push(query!(
+                cypher_statements.push(cypher_query!(
                     "CREATE (e:Exercised \
                     {{ label: {label}, \
                     choice_name: {choice_name}, \
@@ -146,7 +178,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Quer
         //     parent_id = parent_id as i64,
         //     child_id = child_id as i64,
         // ));
-        let query = format!(
+        let cypher = format!(
             "MATCH (parent \
             {{offset: {offset}, \
             node_id: {parent_id}}}), \
@@ -157,13 +189,13 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Quer
             parent_id = parent_id,
             child_id = child_id,
         );
-        cypher_statements.push(Query::new(query));
+        cypher_statements.push(CypherQuery::new(cypher));
     }
 
     // Add TARGET relationships: from Exercised node to Created node with matching contract_id
     for event in &transaction.events {
         if let Some(Event::Exercised(exercised)) = &event.event {
-            cypher_statements.push(query!(
+            cypher_statements.push(cypher_query!(
                 "MATCH (e:Exercised \
                 {{offset: {offset}, \
                 node_id: {node_id}}}), \
@@ -174,7 +206,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Quer
                 target_contract_id = exercised.contract_id.clone(),
             ));
             if exercised.consuming {
-                cypher_statements.push(query!(
+                cypher_statements.push(cypher_query!(
                     "MATCH (e:Exercised \
                     {{offset: {offset}, \
                     node_id: {node_id}}}), \

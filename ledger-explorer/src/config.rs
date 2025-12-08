@@ -5,8 +5,19 @@ use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    pub logging: LoggingConfig,
     pub neo4j: Neo4jConfig,
     pub ledger: LedgerConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_log_level")]
+    pub level: String,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -18,7 +29,8 @@ pub struct Neo4jConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct LedgerConfig {
-    pub party: String,
+    pub reader_user: String,
+    pub parties: Option<Vec<String>>,
     pub url: String,
 }
 
@@ -51,28 +63,11 @@ mod tests {
         assert!(!cfg.neo4j.uri.is_empty());
         assert!(!cfg.neo4j.user.is_empty());
         assert!(!cfg.neo4j.password.is_empty());
-        assert!(!cfg.ledger.party.is_empty());
+        assert!(!cfg.ledger.reader_user.is_empty());
         assert!(!cfg.ledger.url.is_empty());    
         Ok(())
     }
 }
-// #[tokio::main]
-// async fn main() -> Result<()> {
-//     let cfg_path = Path::new("demo-ledger-explorer/config/config.toml");
-//     let config = read_config(cfg_path)?;
 
-//     let party = config.ledger.party;
-//     let url = config.ledger.url;
-
-    
-//     // let parties = vec![party];
-//     // let update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
-//     // let cypher_stream = update_stream.map(|update| {
-//     //     cypher::get_updates_response_to_cypher(&update.unwrap())
-//     // });
-    
-
-//     Ok(())
-// }
 
 

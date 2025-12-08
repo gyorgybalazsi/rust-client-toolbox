@@ -1252,6 +1252,8 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tonic",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

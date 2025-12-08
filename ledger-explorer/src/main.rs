@@ -4,6 +4,7 @@ use ledger_explorer::graph::apply_cypher_vec_stream_to_neo4j;
 use ledger_explorer::cypher;
 use client::stream_updates::stream_updates;
 use ledger_api::v2::admin::user_management_service_client::UserManagementServiceClient;
+use tracing::{info, debug, error};
 
 #[derive(Parser)]
 #[command(name = "ledger-explorer")]
@@ -27,30 +28,17 @@ enum Commands {
         #[arg(long)]
         end_inclusive: Option<i64>,
     },
-    /// Update Neo4j graph from the event node stream
-    SyncOld {
-        #[arg(long)]
-        access_token: String,
-        #[arg(long)]
-        party: String,
-        #[arg(long)]
-        url: String,
-        #[arg(long)]
-        begin_exclusive: i64,
-        #[arg(long)]
-        end_inclusive: Option<i64>,
-        #[arg(long, default_value = "neo4j://localhost:7687")]
-        neo4j_uri: String,
-        #[arg(long, default_value = "neo4j")]
-        neo4j_user: String,
-        #[arg(long, default_value = "password")]
-        neo4j_pass: String,
-    },
     Sync
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing subscriber with env filter (defaults to INFO, configurable via RUST_LOG)
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive(tracing::Level::INFO.into()))
+        .init();
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -64,37 +52,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("End transaction");
             }
         }
-        Commands::SyncOld { access_token, url, begin_exclusive, end_inclusive, party, neo4j_uri, neo4j_user, neo4j_pass } => {
-            let parties = vec![party];
-            let update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
-            let cypher_stream = update_stream.map(|update| {
-                cypher::get_updates_response_to_cypher(&update.unwrap())
-            });
-            let (before, after, update_time) = apply_cypher_vec_stream_to_neo4j(&neo4j_uri, &neo4j_user, &neo4j_pass, cypher_stream).await?;
-            println!("Neo4j graph updated from event stream. Before max offset: {:?}, After max offset: {:?}, Update time in millis: {:?}", before, after, update_time);
-        }
         Commands::Sync => {
+            info!("Starting sync command");
+
+            debug!("Reading configuration from TOML file");
             let config = ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml");
-            let party = config.ledger.party;
+            let reader_user = config.ledger.reader_user;
+            let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
             let neo4j_uri = config.neo4j.uri;
             let neo4j_user = config.neo4j.user;
             let neo4j_pass = config.neo4j.password;
 
+            info!(
+                ledger_url = %ledger_url,
+                neo4j_uri = %neo4j_uri,
+                parties = ?parties,
+                "Configuration loaded"
+            );
+
+            debug!("Connecting to ledger at {}", ledger_url);
             let channel = tonic::transport::Channel::from_shared(ledger_url.clone())?
                 .connect()
                 .await?;
-            let mut user_management_client = UserManagementServiceClient::new(channel);
-            let token = client::jwt::fake_jwt(&mut user_management_client, &party).await?;
+            info!("Successfully connected to ledger");
 
-            let update_stream = stream_updates(Some(&token), 0, None, vec![party], ledger_url).await?;
+            let token = client::jwt::fake_jwt_for_user(&reader_user);
+            info!("JWT token obtained successfully");
+
+            info!("Starting update stream from offset 0");
+            let update_stream = stream_updates(Some(&token), 0, None, parties.clone(), ledger_url).await?;
             let cypher_stream = update_stream.map(|update| {
+                match &update {
+                    Ok(_) => debug!("Processing update from stream"),
+                    Err(e) => error!(error = %e, "Error in update stream"),
+                }
                 cypher::get_updates_response_to_cypher(&update.unwrap())
-            }); 
+            });
 
+            info!("Applying cypher queries to Neo4j");
             let (before, after, update_time) = apply_cypher_vec_stream_to_neo4j(&neo4j_uri, &neo4j_user, &neo4j_pass, cypher_stream).await?;
-            println!("Neo4j graph updated from event stream. Before max offset: {:?}, After max offset: {:?}, Update time in millis: {:?}", before, after, update_time);      
-            
+
+            info!(
+                before_offset = ?before,
+                after_offset = ?after,
+                update_time_ms = ?update_time,
+                "Neo4j graph sync completed"
+            );
         }
     }
 

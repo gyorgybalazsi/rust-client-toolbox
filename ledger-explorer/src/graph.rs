@@ -1,8 +1,10 @@
 use futures_util::Stream;
-use neo4rs::{Graph, Query, query};
+use tracing::{debug, info};
+use neo4rs::{Graph, query};
 use std::time::Instant;
 use tokio_stream::StreamExt;
 
+pub use crate::cypher::CypherQuery;
 
 pub async fn apply_cypher_vec_stream_to_neo4j<S>(
     uri: &str,
@@ -11,13 +13,14 @@ pub async fn apply_cypher_vec_stream_to_neo4j<S>(
     mut query_stream: S,
 ) -> Result<(Option<i64>, Option<i64>, u128), Box<dyn std::error::Error>>
 where
-    S: Stream<Item = Vec<Query>> + Unpin,
+    S: Stream<Item = Vec<CypherQuery>> + Unpin,
 {
-
-    
+    info!("Connecting to Neo4j at {}", uri);
     let graph = Graph::new(uri, user, pass)?;
+    debug!("Successfully connected to Neo4j");
 
     // Query max offset before update
+    debug!("Querying max offset before update");
     let before_offset = {
         let mut result = graph.execute(query("MATCH (n) RETURN max(n.offset) as max_offset")).await?;
         match result.next().await {
@@ -26,19 +29,35 @@ where
             Err(e) => return Err(Box::new(e)),
         }
     };
+    info!("Max offset before update: {:?}", before_offset);
 
     // Measure update time
     let start_time = Instant::now();
+    info!("Starting to process query stream");
 
+    let mut batch_count = 0u64;
     while let Some(cypher_vec) = query_stream.next().await {
+        batch_count += 1;
+        let query_count = cypher_vec.len();
+        debug!("Processing batch {}: {} queries", batch_count, query_count);
+
+        for (i, cq) in cypher_vec.iter().enumerate() {
+            debug!("Batch {} query {}: {}", batch_count, i + 1, cq.cypher);
+        }
+
+        let queries: Vec<_> = cypher_vec.into_iter().map(|cq| cq.query).collect();
         let mut txn = graph.start_txn().await?;
-        txn.run_queries(cypher_vec).await?;
+        txn.run_queries(queries).await?;
         txn.commit().await?;
+
+        debug!("Batch {} committed successfully", batch_count);
     }
 
     let update_time_ms = start_time.elapsed().as_millis();
+    info!("Processed {} batches in {} ms", batch_count, update_time_ms);
 
     // Query max offset after update
+    debug!("Querying max offset after update");
     let after_offset = {
         let mut result = graph.execute(query("MATCH (n) RETURN max(n.offset) as max_offset")).await?;
         match result.next().await {
@@ -47,6 +66,12 @@ where
             Err(e) => return Err(Box::new(e)),
         }
     };
+    info!("Max offset after update: {:?}", after_offset);
+
+    info!(
+        "Neo4j update complete: offset {:?} -> {:?}, {} batches in {} ms",
+        before_offset, after_offset, batch_count, update_time_ms
+    );
 
     Ok((before_offset, after_offset, update_time_ms))
 }
