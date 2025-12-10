@@ -9,7 +9,9 @@ password="password"
 [ledger]
 reader_user="all_reader_user"
 parties=[
-    "TicketWizard::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8",
-    "ScroogeBank::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8",
-    "Alice::1220e399931b668f8413a5e0e6b8c48f92b1bae88f9c03219b01736b6ba64c5c9eb8"]
+    "Backend-4f1df03a::12205baaed27699597db4b7dc481a3a7f23453ddff9c287680414e1f9ee6d5a2ed1d",
+    "Alice-1df42503::12205baaed27699597db4b7dc481a3a7f23453ddff9c287680414e1f9ee6d5a2ed1d",
+    "Bob-c812a76d::12205baaed27699597db4b7dc481a3a7f23453ddff9c287680414e1f9ee6d5a2ed1d",
+    "Admin-d4d95138::12205baaed27699597db4b7dc481a3a7f23453ddff9c287680414e1f9ee6d5a2ed1d",
+    "VaultManager-9b3970be::12205baaed27699597db4b7dc481a3a7f23453ddff9c287680414e1f9ee6d5a2ed1d"]
 url="http://localhost:6865"

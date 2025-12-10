@@ -12,7 +12,10 @@ use ledger_api::v2::EventFormat;
 
 #[derive(Debug)]
 pub enum CommandResult {
-    ContractId(String),
+    Created {
+        contract_id: String,
+        create_argument_blob: Option<Vec<u8>>,
+    },
     ExerciseResult(Value),
 }
 
@@ -86,7 +89,10 @@ pub async fn submit_commands(
         for event in &tx.events {
             match &event.event {
                 Some(Event::Created(created_event)) => {
-                    results.push(CommandResult::ContractId(created_event.contract_id.clone()));
+                    results.push(CommandResult::Created {
+                        contract_id: created_event.contract_id.clone(),
+                        create_argument_blob: created_event.create_argument_blob.clone(),
+                    });
                 }
                 Some(Event::Exercised(exercised_event)) => {
                     if let Some(val) = &exercised_event.exercise_result {
