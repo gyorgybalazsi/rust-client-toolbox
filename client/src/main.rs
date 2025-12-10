@@ -149,7 +149,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Parties { filter, url, access_token } => {
-            let parties = client::parties::get_parties(url, Some(&access_token), filter).await?;
+            let parties = client::party_management::get_parties::get_parties(url, Some(&access_token), filter).await?;
             if parties.is_empty() {
                 info!("No parties found.");
             } else {

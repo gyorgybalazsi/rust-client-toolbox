@@ -186,7 +186,7 @@ impl Give {
 mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
-    use client::parties::get_parties;
+    use client::party_management::get_parties::get_parties;
     use client::run_script::run_script;
     use client::testutils::start_sandbox;
     use tokio;

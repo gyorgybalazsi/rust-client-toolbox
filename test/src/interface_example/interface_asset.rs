@@ -140,7 +140,7 @@ pub async fn exercise_getview(
 mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
-    use client::parties::get_parties;
+    use client::party_management::get_parties::get_parties;
     use client::testutils::start_sandbox;
     use client::upload_dar::upload_dars;
     use tokio;

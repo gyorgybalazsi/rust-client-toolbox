@@ -61,7 +61,7 @@ mod tests {
     use crate::test_types::asset::Asset;
     use crate::test_types::give::Give;
     use client::jwt::fake_jwt_for_user;
-    use client::parties::get_parties;
+    use client::party_management::get_parties::get_parties;
     use client::testutils::start_sandbox;
     use ledger_api::v2::command_service_client::CommandServiceClient;
     use tracing::info;
