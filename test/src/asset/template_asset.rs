@@ -12,7 +12,7 @@ use ledger_api::v2::{
     Command, Commands, CreateCommand, ExerciseCommand,
     command_service_client::CommandServiceClient, value::Sum,
 };
-use tracing::info;
+use tracing::{debug, info};
 pub use submit::create_contract::create_contract;
 
 pub async fn create_asset(
@@ -21,7 +21,7 @@ pub async fn create_asset(
     user_id: Option<&str>,
     package_id: String,
     payload: Asset,
-) -> Result<String> {
+) -> Result<(String, Option<Vec<u8>>)> {
     let act_as = payload.issuer.to_string();
     let create_asset_command = CreateCommand {
         template_id: Some(TemplateId::new(&package_id, "Main", "Asset").to_template_id()),
@@ -41,23 +41,24 @@ pub async fn create_asset(
     };
 
     let result = submit_commands(command_service_client, access_token, commands).await?;
-    let contract_ids = result
+    let created_contracts: Vec<_> = result
         .iter()
         .filter_map(|r| {
-            if let CommandResult::ContractId(id) = r {
-                Some(id.clone())
+            if let CommandResult::Created { contract_id, create_argument_blob } = r {
+                debug!("create_argument_blob: {:?}", create_argument_blob);
+                Some((contract_id.clone(), create_argument_blob.clone()))
             } else {
                 None
             }
         })
-        .collect::<Vec<_>>();
+        .collect();
 
-    if contract_ids.len() == 1 {
-        Ok(contract_ids[0].clone())
+    if created_contracts.len() == 1 {
+        Ok(created_contracts[0].clone())
     } else {
         Err(anyhow!(
             "Expected exactly one contract id, found {}",
-            contract_ids.len()
+            created_contracts.len()
         ))
     }
 }
@@ -70,7 +71,7 @@ pub async fn exercise_give(
     contract_id: String,
     current_owner: String,
     new_owner: String,
-) -> Result<String> {
+) -> Result<(String, Option<Vec<u8>>)> {
     let exercise_command = ExerciseCommand {
         template_id: Some(TemplateId::new(&package_id, "Main", "Asset").to_template_id()),
         contract_id: contract_id.clone(),
@@ -90,23 +91,24 @@ pub async fn exercise_give(
     };
 
     let result = submit_commands(command_service_client, access_token, commands).await?;
-    let contract_ids = result
+    let created_contracts: Vec<_> = result
         .iter()
         .filter_map(|r| {
-            if let CommandResult::ContractId(id) = r {
-                Some(id.clone())
+            if let CommandResult::Created { contract_id, create_argument_blob } = r {
+                debug!("create_argument_blob: {:?}", create_argument_blob);
+                Some((contract_id.clone(), create_argument_blob.clone()))
             } else {
                 None
             }
         })
-        .collect::<Vec<_>>();
+        .collect();
 
-    if contract_ids.len() == 1 {
-        Ok(contract_ids[0].clone())
+    if created_contracts.len() == 1 {
+        Ok(created_contracts[0].clone())
     } else {
         Err(anyhow!(
             "Expected exactly one contract id, found {}",
-            contract_ids.len()
+            created_contracts.len()
         ))
     }
 }
@@ -316,7 +318,7 @@ mod tests {
             "Asset creation failed: {:?}",
             create_result
         );
-        let created_contract_id = create_result.unwrap();
+        let (created_contract_id, _blob) = create_result.unwrap();
 
         // Give asset
         let give_result = exercise_give(
@@ -332,7 +334,7 @@ mod tests {
 
         assert!(give_result.is_ok(), "Give asset failed: {:?}", give_result);
 
-        let given_contract_id = give_result.unwrap();
+        let (given_contract_id, _blob) = give_result.unwrap();
 
         // Exercise GetView
         let get_view_result = exercise_get_view(

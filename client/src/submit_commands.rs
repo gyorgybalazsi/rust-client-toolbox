@@ -89,9 +89,14 @@ pub async fn submit_commands(
         for event in &tx.events {
             match &event.event {
                 Some(Event::Created(created_event)) => {
+                    let blob = if created_event.created_event_blob.is_empty() {
+                        None
+                    } else {
+                        Some(created_event.created_event_blob.clone())
+                    };
                     results.push(CommandResult::Created {
                         contract_id: created_event.contract_id.clone(),
-                        create_argument_blob: created_event.create_argument_blob.clone(),
+                        create_argument_blob: blob,
                     });
                 }
                 Some(Event::Exercised(exercised_event)) => {

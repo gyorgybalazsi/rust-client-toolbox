@@ -54,8 +54,8 @@ pub async fn create_cash(
     };
 
     let result = submit_commands(command_service_client, access_token, commands).await?;
-    let contract_id = if let Some(CommandResult::ContractId(id)) = result.get(0) {
-        id.clone()
+    let contract_id = if let Some(CommandResult::Created { contract_id, .. }) = result.get(0) {
+        contract_id.clone()
     } else {
         return Err(anyhow!("No contract id found in create_cash result"));
     };

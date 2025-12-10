@@ -35,8 +35,8 @@ pub async fn create_contract<T: ToCreateArguments>(
     let contract_ids = result
         .iter()
         .filter_map(|r| {
-            if let CommandResult::ContractId(id) = r {
-                Some(id.clone())
+            if let CommandResult::Created { contract_id, .. } = r {
+                Some(contract_id.clone())
             } else {
                 None
             }

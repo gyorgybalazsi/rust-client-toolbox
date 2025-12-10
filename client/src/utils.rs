@@ -36,7 +36,7 @@ pub fn build_filters_by_party(parties: &[String]) -> HashMap<String, Filters> {
                     identifier_filter: Some(
                         ledger_api::v2::cumulative_filter::IdentifierFilter::WildcardFilter(
                             WildcardFilter {
-                                include_created_event_blob: false,
+                                include_created_event_blob: true,
                             },
                         ),
                     ),
