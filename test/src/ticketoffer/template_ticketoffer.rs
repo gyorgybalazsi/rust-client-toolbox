@@ -68,7 +68,7 @@ pub async fn create_ticketoffer(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
     let contract_id = if let Some(CommandResult::Created { contract_id, .. }) = result.get(0) {
         contract_id.clone()
     } else {
@@ -105,7 +105,7 @@ pub async fn exercise_accept(
         ..Default::default()
     };
 
-    submit_commands(command_service_client, access_token, commands).await?;
+    submit_commands(command_service_client, access_token, commands, None).await?;
 
     Ok(())
 }

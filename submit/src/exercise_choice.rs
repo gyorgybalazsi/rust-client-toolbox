@@ -4,7 +4,7 @@ use client::submit_commands::submit_commands;
 use daml_type_rep::lapi_access::LapiAccess;
 use daml_type_rep::template_id::TemplateId;
 use ledger_api::v2::{
-    Command, Commands, ExerciseCommand,
+    Command, Commands, DisclosedContract, ExerciseCommand,
     command_service_client::CommandServiceClient,
 };
 
@@ -18,6 +18,7 @@ pub async fn exercise_choice<T: LapiAccess>(
     contract_id: String,
     choice: &str,
     choice_argument: T,
+    disclosed_contracts: Option<Vec<DisclosedContract>>,
 ) -> Result<Vec<String>> {
     let exercise_command = ExerciseCommand {
         template_id: Some(template_id.to_template_id()),
@@ -38,7 +39,7 @@ pub async fn exercise_choice<T: LapiAccess>(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, disclosed_contracts).await?;
     let contract_ids = result
         .iter()
         .filter_map(|r| {
@@ -121,6 +122,7 @@ mod tests {
             vec![alice_party.clone()],
             template_id.clone(),
             asset,
+            None, // no disclosed contracts
         )
         .await;
 
@@ -143,6 +145,7 @@ mod tests {
             created_contract_id,
             "Give",
             Give::new(bob_party.clone()),
+            None, // no disclosed contracts
         )
         .await;
 

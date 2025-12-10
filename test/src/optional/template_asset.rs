@@ -42,7 +42,7 @@ pub async fn create_asset(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
     let contract_ids = result
         .iter()
         .filter_map(|r| {
@@ -91,7 +91,7 @@ pub async fn exercise_give(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
     let contract_ids = result
         .iter()
         .filter_map(|r| {
@@ -144,7 +144,7 @@ pub async fn exercise_get_view(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
     info!("Length of result: {}", result.len());
     if let Some(CommandResult::ExerciseResult(value)) = result.get(0) {
         info!("Exercise GetView result: {:#?}", value);

@@ -1,7 +1,8 @@
 use daml_type_rep::template_id::TemplateId;
 use client::submit_commands::submit_commands;
 use ledger_api::v2::{
-    Command, Commands, CreateCommand, command_service_client::CommandServiceClient,
+    Command, Commands, CreateCommand, DisclosedContract,
+    command_service_client::CommandServiceClient,
 };
 use ledger_api::v2::Record;
 use anyhow::{anyhow, Result};
@@ -48,7 +49,7 @@ pub async fn create_ticketoffer(
     organizer: String,
     buyer: String,
     price: f64,
-) -> Result<String> {
+) -> Result<CreateTicketOfferResult> {
     let create_ticketoffer_command = CreateCommand {
         template_id: Some(TemplateId::new(package_id, "Main", "TicketOffer").to_template_id()),
         create_arguments: Some(
@@ -68,14 +69,22 @@ pub async fn create_ticketoffer(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
-    let contract_id = if let Some(CommandResult::Created { contract_id, .. }) = result.get(0) {
-        contract_id.clone()
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
+    if let Some(CommandResult::Created { contract_id, create_argument_blob }) = result.get(0) {
+        Ok(CreateTicketOfferResult {
+            contract_id: contract_id.clone(),
+            created_event_blob: create_argument_blob.clone(),
+        })
     } else {
-        return Err(anyhow!("No contract id found in create_cash result"));
-    };
+        Err(anyhow!("No contract id found in create_ticketoffer result"))
+    }
+}
 
-    Ok(contract_id)
+/// Result of creating a ticket offer, including the blob for explicit disclosure
+#[derive(Debug)]
+pub struct CreateTicketOfferResult {
+    pub contract_id: String,
+    pub created_event_blob: Option<Vec<u8>>,
 }
 
 pub async fn exercise_accept(
@@ -86,6 +95,7 @@ pub async fn exercise_accept(
     contract_id: String,
     cash_id: String,
     buyer: String,
+    disclosed_contracts: Option<Vec<DisclosedContract>>,
 ) -> Result<()> {
     let exercise_command = ledger_api::v2::ExerciseCommand {
         template_id: Some(TemplateId::new(package_id, "Main", "TicketOffer").to_template_id()),
@@ -105,7 +115,7 @@ pub async fn exercise_accept(
         ..Default::default()
     };
 
-    submit_commands(command_service_client, access_token, commands).await?;
+    submit_commands(command_service_client, access_token, commands, disclosed_contracts).await?;
 
     Ok(())
 }
@@ -119,7 +129,7 @@ mod tests {
     use client::testutils::start_sandbox;
     use tokio;
     use tracing::info;
-    use crate::ticketoffer::template_cash::create_cash;
+    use crate::ticketoffer_explicit_disclosure::template_cash::create_cash;
 
     #[tokio::test]
     async fn test_create_and_accept_ticketoffer() -> Result<()> {
@@ -208,7 +218,11 @@ mod tests {
             create_ticketoffer_result
         );
 
-        let ticketoffer_contract_id = create_ticketoffer_result.unwrap();
+        let ticketoffer_result = create_ticketoffer_result.unwrap();
+        let ticketoffer_contract_id = ticketoffer_result.contract_id;
+        let ticketoffer_blob = ticketoffer_result.created_event_blob;
+
+        info!("TicketOffer created with id: {}, blob present: {}", ticketoffer_contract_id, ticketoffer_blob.is_some());
 
         let create_cash_result = create_cash(
             &mut command_service_client,
@@ -223,9 +237,28 @@ mod tests {
 
         assert!(create_cash_result.is_ok(), "Cash creation failed: {:?}", create_cash_result);
 
-        let cash_contract_id = create_cash_result.unwrap();
+        let cash_result = create_cash_result.unwrap();
+        let cash_contract_id = cash_result.contract_id;
 
-        // Accept ticket offer
+        info!("Cash contract created with id: {}", cash_contract_id);
+
+        // Build disclosed contracts for explicit disclosure
+        // The TicketOffer contract needs to be disclosed to Alice (buyer)
+        // because she is not a stakeholder/observer on the contract created by TicketWizard
+        let disclosed_contracts = if let Some(blob) = ticketoffer_blob {
+            info!("Using explicit disclosure with TicketOffer contract blob ({} bytes)", blob.len());
+            Some(vec![DisclosedContract {
+                template_id: None,
+                contract_id: String::new(),
+                created_event_blob: blob,
+                synchronizer_id: String::new(),
+            }])
+        } else {
+            info!("No blob available, proceeding without explicit disclosure");
+            None
+        };
+
+        // Accept ticket offer with explicit disclosure of the TicketOffer contract
         let accept_result = exercise_accept(
             &mut command_service_client,
             Some(alice_token.as_str()),
@@ -234,10 +267,13 @@ mod tests {
             ticketoffer_contract_id,
             cash_contract_id,
             buyer.clone(),
+            disclosed_contracts,
         )
         .await;
 
         assert!(accept_result.is_ok(), "Accept ticket offer failed: {:?}", accept_result);
+
+        info!("Successfully accepted ticket offer with explicit disclosure!");
 
         Ok(())
     }

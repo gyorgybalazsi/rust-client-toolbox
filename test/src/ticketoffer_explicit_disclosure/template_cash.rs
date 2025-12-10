@@ -25,6 +25,13 @@ impl Cash {
     }
 }
 
+/// Result of creating a cash contract, including the blob for explicit disclosure
+#[derive(Debug)]
+pub struct CreateCashResult {
+    pub contract_id: String,
+    pub created_event_blob: Option<Vec<u8>>,
+}
+
 pub async fn create_cash(
     command_service_client: &mut CommandServiceClient<tonic::transport::Channel>,
     access_token: Option<&str>,
@@ -33,7 +40,7 @@ pub async fn create_cash(
     issuer: String,
     owner: String,
     amount: f64,
-) -> Result<String> {
+) -> Result<CreateCashResult> {
     let create_cash_command = CreateCommand {
         template_id: Some(TemplateId::new(
             package_id,
@@ -53,14 +60,15 @@ pub async fn create_cash(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
-    let contract_id = if let Some(CommandResult::Created { contract_id, .. }) = result.get(0) {
-        contract_id.clone()
+    let result = submit_commands(command_service_client, access_token, commands, None).await?;
+    if let Some(CommandResult::Created { contract_id, create_argument_blob }) = result.get(0) {
+        Ok(CreateCashResult {
+            contract_id: contract_id.clone(),
+            created_event_blob: create_argument_blob.clone(),
+        })
     } else {
-        return Err(anyhow!("No contract id found in create_cash result"));
-    };
-
-    Ok(contract_id)
+        Err(anyhow!("No contract id found in create_cash result"))
+    }
 }
 
 #[derive(serde::Serialize, LapiAccess)]
@@ -110,6 +118,7 @@ pub async fn exercise_transfer(
         command_service_client,
         access_token,
         commands,
+        None,
     ).await?;
     Ok(())
 }
@@ -211,7 +220,7 @@ mod tests {
             create_result
         );
 
-        let contract_id = create_result.unwrap();
+        let create_cash_result = create_result.unwrap();
 
         // Transfer cash
         let transfer_result = exercise_transfer(
@@ -219,7 +228,7 @@ mod tests {
             Some(alice_token.as_str()),
             Some(alice_user),
             &package_id,
-            contract_id,
+            create_cash_result.contract_id,
             new_owner.clone(),
             owner.clone(),
         )

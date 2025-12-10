@@ -2,6 +2,7 @@ use ledger_api::v2::SubmitAndWaitForTransactionRequest;
 use ledger_api::v2::command_service_client::CommandServiceClient;
 use ledger_api::v2::event::Event;
 use ledger_api::v2::Commands;
+use ledger_api::v2::DisclosedContract;
 use ledger_api::v2::Value;
 use tracing::{info, error, debug};
 use anyhow::Result;
@@ -23,17 +24,29 @@ pub async fn submit_commands(
     command_service_client: &mut CommandServiceClient<tonic::transport::Channel>,
     access_token: Option<&str>,
     commands: Commands,
+    disclosed_contracts: Option<Vec<DisclosedContract>>,
 ) -> Result<Vec<CommandResult>> {
     info!(
-        "Submitting commands at {}:{}: act_as={:?}, command_id={:?}, command: {:#?}",
+        "Submitting commands at {}:{}: act_as={:?}, command_id={:?}, command: {:#?}, disclosed_contracts: {:?}",
         file!(),
         line!(),
         commands.act_as,
         commands.command_id,
-        commands.commands
+        commands.commands,
+        disclosed_contracts.as_ref().map(|d| d.len())
     );
 
     let parties = commands.act_as.clone();
+
+    // Apply disclosed contracts if provided
+    let commands = if let Some(disclosed) = disclosed_contracts {
+        Commands {
+            disclosed_contracts: disclosed,
+            ..commands
+        }
+    } else {
+        commands
+    };
 
     let filters_by_party = build_filters_by_party(&parties);
 

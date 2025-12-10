@@ -4,7 +4,7 @@ use client::submit_commands::submit_commands;
 use daml_type_rep::lapi_access::ToCreateArguments;
 use daml_type_rep::template_id::TemplateId;
 use ledger_api::v2::{
-    Command, Commands, CreateCommand,
+    Command, Commands, CreateCommand, DisclosedContract,
     command_service_client::CommandServiceClient,
 };
 
@@ -15,6 +15,7 @@ pub async fn create_contract<T: ToCreateArguments>(
     act_as: Vec<String>,
     template_id: TemplateId,
     payload: T,
+    disclosed_contracts: Option<Vec<DisclosedContract>>,
 ) -> Result<String> {
     let create_command = CreateCommand {
         template_id: Some(template_id.to_template_id()),
@@ -31,7 +32,7 @@ pub async fn create_contract<T: ToCreateArguments>(
         ..Default::default()
     };
 
-    let result = submit_commands(command_service_client, access_token, commands).await?;
+    let result = submit_commands(command_service_client, access_token, commands, disclosed_contracts).await?;
     let contract_ids = result
         .iter()
         .filter_map(|r| {
@@ -116,6 +117,7 @@ mod tests {
             vec![alice_party.clone()],
             template_id,
             asset,
+            None, // no disclosed contracts
         )
         .await;
 
