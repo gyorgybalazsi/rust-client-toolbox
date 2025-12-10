@@ -188,7 +188,7 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::parties::get_parties;
-    use client::testutils::daml_start;
+    use client::testutils::start_sandbox;
     use tokio;
     use tracing::info;
     use tracing_subscriber::EnvFilter;
@@ -209,8 +209,9 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
+        let dar_path = package_root.join(".daml").join("dist").join("daml-optional-0.0.1.dar");
 
-        let _guard = daml_start(package_root, sandbox_port).await?;
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
         // Setup test values
         let package_id = "#daml-optional".to_string();

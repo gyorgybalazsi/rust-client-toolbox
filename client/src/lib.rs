@@ -6,3 +6,4 @@ pub mod jwt;
 pub mod submit_commands;
 pub mod testutils;
 pub mod upload_dar;
+pub mod run_script;

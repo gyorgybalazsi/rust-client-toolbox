@@ -61,7 +61,7 @@ mod tests {
     use crate::test_types::give::Give;
     use client::jwt::fake_jwt_for_user;
     use client::parties::get_parties;
-    use client::testutils::daml_start;
+    use client::testutils::start_sandbox;
     use ledger_api::v2::command_service_client::CommandServiceClient;
     use tracing::info;
     use tracing_subscriber::EnvFilter;
@@ -84,8 +84,9 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
+        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
-        let _guard = daml_start(package_root, sandbox_port).await?;
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
         // Setup test values
         let package_id = "#daml-asset".to_string();

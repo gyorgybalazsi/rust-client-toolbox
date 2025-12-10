@@ -187,7 +187,8 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::parties::get_parties;
-    use client::testutils::daml_start;
+    use client::run_script::run_script;
+    use client::testutils::start_sandbox;
     use tokio;
     use tracing::info;
     use tracing_subscriber::EnvFilter;
@@ -210,8 +211,9 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
+        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
-        let _guard = daml_start(package_root, sandbox_port).await?;
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
         // Setup test values
         let package_id = "#daml-asset".to_string();
@@ -274,8 +276,18 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
+        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
-        let _guard = daml_start(package_root, sandbox_port).await?;
+        let _guard = start_sandbox(package_root, dar_path.clone(), sandbox_port).await?;
+
+        // Run the setup script from the DAR
+        let result = run_script(
+            "localhost",
+            sandbox_port,
+            &dar_path,
+            "Main:setup",
+        )?;
+        info!("Script result: {}", result);
 
         // Setup test values
         let package_id = "#daml-asset".to_string();
@@ -352,6 +364,41 @@ mod tests {
             "GetView exercise failed: {:?}",
             get_view_result
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_run_script() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new("debug"))
+            .pretty()
+            .try_init()
+            .ok();
+
+        let sandbox_port = 6865;
+        let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let package_root = std::path::PathBuf::from(&crate_root)
+            .join("..")
+            .join("_daml")
+            .join("daml-asset")
+            .canonicalize()
+            .expect("Failed to canonicalize package_root");
+
+        info!("Starting DAML sandbox at {}", package_root.display());
+        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
+
+        let _guard = start_sandbox(package_root, dar_path.clone(), sandbox_port).await?;
+
+        // Run the setup script from the DAR
+        let result = run_script(
+            "localhost",
+            sandbox_port,
+            &dar_path,
+            "Main:setup",
+        )?;
+
+        info!("Script result: {}", result);
 
         Ok(())
     }

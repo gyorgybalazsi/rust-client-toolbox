@@ -141,7 +141,7 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::parties::get_parties;
-    use client::testutils::daml_start;
+    use client::testutils::start_sandbox;
     use client::upload_dar::upload_dars;
     use tokio;
 
@@ -167,8 +167,9 @@ mod tests {
             .canonicalize()
             .expect("Failed to canonicalize package_root");
         info!("Starting sandbox at {:?}", package_root);
+        let dar_path = package_root.join(".daml").join("dist").join("daml-interface-example-test-1.0.0.dar");
 
-        let _guard = daml_start(package_root, sandbox_port).await?;
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
         upload_dars(
             &std::path::PathBuf::from(format!("http://localhost:{}", sandbox_port)),

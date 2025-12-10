@@ -145,7 +145,7 @@ pub fn package_id_from_dar(dar_path: &Path) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutils::daml_start;
+    use crate::testutils::start_sandbox;
     use tokio;
     use std::path::PathBuf;
 
@@ -160,8 +160,9 @@ mod tests {
             .join("_daml")
             .join("daml-interface-example")
             .join("test");
+        let dar_path = package_root.join(".daml").join("dist").join("daml-interface-example-test-1.0.0.dar");
         let sandbox_port = 6865;
-        let _guard = daml_start(package_root, sandbox_port)
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port)
             .await
             .expect("Failed to start sandbox");
 

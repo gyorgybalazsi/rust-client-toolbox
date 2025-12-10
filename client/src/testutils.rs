@@ -10,26 +10,16 @@ use tracing::info;
 
 /// Starts the Daml sandbox in the background.
 /// Returns Ok(SandboxGuard) if the process starts successfully.
-pub async fn daml_start(package_root: PathBuf, sandbox_port: u16) -> Result<SandboxGuard> {
-    let sandbox_admin_port = sandbox_port + 1;
-    let sequencer_port = sandbox_port + 2;
-    let sequencer_admin_port = sandbox_port + 3;
-    let mediator_port = sandbox_port + 4;
+pub async fn start_sandbox(package_root: PathBuf, dar_path: PathBuf, sandbox_port: u16) -> Result<SandboxGuard> {
     let mut child;
     unsafe {
-        child = Command::new("daml")
+        child = Command::new("dpm")
             .args(&[
-                "start",
-                "--sandbox-port",
+                "sandbox",
+                "--dar",
+                dar_path.to_str().unwrap(),
+                "--ledger-api-port",
                 &sandbox_port.to_string(),
-                "--sandbox-admin-api-port",
-                &sandbox_admin_port.to_string(),
-                "--sandbox-sequencer-public-port",
-                &sequencer_port.to_string(),
-                "--sandbox-sequencer-admin-port",
-                &sequencer_admin_port.to_string(),
-                "--sandbox-mediator-admin-port",
-                &mediator_port.to_string(),
             ])
             .current_dir(&package_root)
             .stdout(Stdio::piped())
@@ -63,7 +53,7 @@ fn wait_for_sandbox_ready(child: &mut Child) -> anyhow::Result<()> {
         // up to 2 minutes if 1 line/sec
         let line = line?;
         info!("Sandbox stdout line: {}", line); // Optionally log each line
-        if line.contains("The Canton sandbox and JSON API are ready to use.") {
+        if line.contains("Canton sandbox is ready.") {
             info!("Sandbox is ready!");
             return Ok(());
         }
@@ -105,10 +95,11 @@ mod tests {
     async fn test_start_and_close_sandbox() {
         tracing_subscriber::fmt::init();
         let package_root = PathBuf::from("/Users/gyorgybalazsi/rust-client-toolbox/_daml/daml-asset");
+        let dar_path = PathBuf::from("/Users/gyorgybalazsi/rust-client-toolbox/_daml/daml-asset/.daml/dist/daml-asset-0.0.1.dar");
         let sandbox_port = 6865;
-        let _guard = daml_start(package_root, sandbox_port)
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port)
             .await
             .expect("Failed to start sandbox");
-        
+
     }
 }

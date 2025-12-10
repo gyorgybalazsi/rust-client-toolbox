@@ -120,8 +120,10 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::parties::get_parties;
+    use client::run_script::run_script;
     use client::testutils::start_sandbox;
     use tokio;
+    use tracing::info;
     use std::path::PathBuf;
 
     #[tokio::test]
@@ -138,8 +140,18 @@ mod tests {
             .canonicalize()
             .unwrap();
 
-        let dar_path = package_root.join(".daml").join("dist").join("daml-ticketoffer-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-ticketoffer-explicit-disclosure-0.0.1.dar");
         let _guard = start_sandbox(package_root.clone(), dar_path, sandbox_port).await?;
+
+        // Run the setup script from the test DAR
+        let test_dar_path = package_root.join("test").join(".daml").join("dist").join("daml-ticketoffer-explicit-disclosure-test-0.0.1.dar");
+        let script_result = run_script(
+            "localhost",
+            sandbox_port,
+            &test_dar_path,
+            "Setup:setup",
+        )?;
+        info!("Script result: {}", script_result);
 
         // Setup test values
         let package_id = "#daml-ticketoffer".to_string();
