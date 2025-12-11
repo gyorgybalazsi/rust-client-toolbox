@@ -7,3 +7,4 @@ pub mod testutils;
 pub mod upload_dar;
 pub mod run_script;
 pub mod party_management;
+pub mod user_management;
