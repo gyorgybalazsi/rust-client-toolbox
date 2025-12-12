@@ -170,7 +170,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
     // Add CONSEQUENCE edges based on structure_markers_from_transaction and extract_edges
     let markers = structure_markers_from_transaction(transaction);
     let edges = extract_edges(&markers);
-    for (offset, parent_id, child_id) in edges {
+    for (offset, parent_id, child_id) in &edges {
         // TODO why the query! macro does not work here?
         // cypher_statements.push(query!(
         //     "MATCH (parent {{offset: {offset}, node_id: {parent_id}}}), (child {{offset: {offset}, node_id: {child_id}}}) CREATE (parent)-[:CONSEQUENCE]->(child);",
@@ -216,6 +216,56 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                     node_id = exercised.node_id,
                     target_contract_id = exercised.contract_id.clone(),
                 ));
+            }
+        }
+    }
+
+    // Identify root-level events (those not in any edge as a child)
+    let child_node_ids: std::collections::HashSet<i32> = edges.iter().map(|(_, _, child)| *child).collect();
+
+    // Collect requester parties from root-level Exercised events and connect to root-level events
+    let offset = transaction.offset;
+    for event in &transaction.events {
+        if let Some(Event::Exercised(exercised)) = &event.event {
+            // Root-level Exercised event: not a child of any other event
+            if !child_node_ids.contains(&exercised.node_id) {
+                for party in &exercised.acting_parties {
+                    // MERGE to create or match existing Party node
+                    cypher_statements.push(cypher_query!(
+                        "MERGE (p:Party {{party_id: {party_id}}})",
+                        party_id = party.clone(),
+                    ));
+                    // Connect Party to this root-level Exercised event
+                    cypher_statements.push(cypher_query!(
+                        "MATCH (p:Party {{party_id: {party_id}}}), \
+                        (e:Exercised {{offset: {offset}, node_id: {node_id}}}) \
+                        CREATE (p)-[:REQUESTED]->(e);",
+                        party_id = party.clone(),
+                        offset = offset,
+                        node_id = exercised.node_id,
+                    ));
+                }
+            }
+        }
+        if let Some(Event::Created(created)) = &event.event {
+            // Root-level Created event: not a child of any other event
+            if !child_node_ids.contains(&created.node_id) {
+                for party in &created.signatories {
+                    // MERGE to create or match existing Party node
+                    cypher_statements.push(cypher_query!(
+                        "MERGE (p:Party {{party_id: {party_id}}})",
+                        party_id = party.clone(),
+                    ));
+                    // Connect Party to this root-level Created event
+                    cypher_statements.push(cypher_query!(
+                        "MATCH (p:Party {{party_id: {party_id}}}), \
+                        (c:Created {{offset: {offset}, node_id: {node_id}}}) \
+                        CREATE (p)-[:REQUESTED]->(c);",
+                        party_id = party.clone(),
+                        offset = offset,
+                        node_id = created.node_id,
+                    ));
+                }
             }
         }
     }
