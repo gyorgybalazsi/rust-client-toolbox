@@ -8,7 +8,7 @@ members = [
     "daml-type-rep",
     "derive-lapi-access",
     "wallet",
-    "test", "submit"]
+    "test", "submit", "sandbox-init"]
 
 [workspace.dependencies]
 tonic = { version = "0.13.1", features = ["transport"] }
