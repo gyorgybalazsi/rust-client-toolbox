@@ -28,7 +28,11 @@ enum Commands {
         #[arg(long)]
         end_inclusive: Option<i64>,
     },
-    Sync
+    Sync {
+        /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
+        #[arg(long)]
+        config_file: Option<String>,
+    }
 }
 
 #[tokio::main]
@@ -52,11 +56,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("End transaction");
             }
         }
-        Commands::Sync => {
+        Commands::Sync { config_file } => {
             info!("Starting sync command");
 
             debug!("Reading configuration from TOML file");
-            let config = ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml");
+            let config = match config_file {
+                Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config from specified path"),
+                None => ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml"),
+            };
             let reader_user = config.ledger.reader_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;

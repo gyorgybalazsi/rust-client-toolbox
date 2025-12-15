@@ -42,14 +42,25 @@ pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 }
 
 pub fn read_config_from_toml() -> Result<Config> {
-    let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let cfg_path = std::path::PathBuf::from(&crate_root)
-        .join("config")
-        .join("config.toml")
-        .canonicalize()
-        .expect("Failed to canonicalize config path");
+    // Try multiple locations for config.toml:
+    // 1. ./config/config.toml (relative to current working directory)
+    // 2. CARGO_MANIFEST_DIR/config/config.toml (for cargo run)
 
-    read_config(&cfg_path)
+    let cwd_config = std::path::PathBuf::from("config").join("config.toml");
+    if cwd_config.exists() {
+        return read_config(&cwd_config);
+    }
+
+    if let Ok(crate_root) = std::env::var("CARGO_MANIFEST_DIR") {
+        let cargo_config = std::path::PathBuf::from(&crate_root)
+            .join("config")
+            .join("config.toml");
+        if cargo_config.exists() {
+            return read_config(&cargo_config);
+        }
+    }
+
+    anyhow::bail!("Could not find config.toml in ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml. Use --config-file to specify a path.")
 }
 
 #[cfg(test)]
