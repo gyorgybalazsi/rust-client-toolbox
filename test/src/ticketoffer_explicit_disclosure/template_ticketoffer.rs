@@ -133,7 +133,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_accept_ticketoffer() -> Result<()> {
-        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+
+        let log_file = std::fs::File::create("test_create_and_accept_ticketoffer.log")
+            .expect("Failed to create log file");
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_writer(log_file)
+            .with_ansi(false);
+        let stdout_layer = tracing_subscriber::fmt::layer()
+            .with_test_writer();
+
+        let _ = tracing_subscriber::registry()
+            .with(file_layer)
+            .with(stdout_layer)
+            .try_init();
+
         let sandbox_port = 6865;
         let url = format!("http://localhost:{}", sandbox_port);
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -193,7 +208,7 @@ mod tests {
             .unwrap();
 
         // Connect to ledger
-        let channel = tonic::transport::Channel::from_shared(url)
+        let channel = tonic::transport::Channel::from_shared(url.clone())
             .unwrap()
             .connect()
             .await
@@ -221,6 +236,49 @@ mod tests {
         let ticketoffer_result = create_ticketoffer_result.unwrap();
         let ticketoffer_contract_id = ticketoffer_result.contract_id;
         let ticketoffer_blob = ticketoffer_result.created_event_blob;
+
+        // Test that we can retrieve the blob using get_blobs_by_template
+        {
+            use client::get_blob::get_blobs_by_template;
+            use client::ledger_end::get_ledger_end;
+            use ledger_api::v2::Identifier;
+
+            let ledger_end = get_ledger_end(&url, Some(&ticketwizard_token)).await?;
+            info!("Ledger end offset: {}", ledger_end);
+
+            let template_id = Identifier {
+                package_id: package_id.clone(),
+                module_name: "Main".to_string(),
+                entity_name: "TicketOffer".to_string(),
+            };
+
+            let blobs = get_blobs_by_template(
+                &url,
+                Some(&ticketwizard_token),
+                vec![organizer.clone()],
+                template_id,
+                ledger_end,
+            )
+            .await?;
+
+            info!("Retrieved {} blobs from get_blobs_by_template", blobs.len());
+            assert!(!blobs.is_empty(), "Expected to find at least one TicketOffer blob");
+
+            let retrieved_blob = blobs.get(&ticketoffer_contract_id);
+            assert!(retrieved_blob.is_some(), "Expected to find blob for contract {}", ticketoffer_contract_id);
+
+            let retrieved_blob = retrieved_blob.unwrap();
+            assert!(!retrieved_blob.created_event_blob.is_empty(), "Retrieved blob should not be empty");
+
+            // If we have the original blob from create, verify they match
+            if let Some(ref original_blob) = ticketoffer_blob {
+                assert_eq!(
+                    &retrieved_blob.created_event_blob, original_blob,
+                    "Retrieved blob should match the blob from create command"
+                );
+                info!("Blob verification successful: retrieved blob matches original ({} bytes)", original_blob.len());
+            }
+        }
 
         info!("TicketOffer created with id: {}, blob present: {}", ticketoffer_contract_id, ticketoffer_blob.is_some());
 

@@ -8,3 +8,4 @@ pub mod upload_dar;
 pub mod run_script;
 pub mod party_management;
 pub mod user_management;
+pub mod get_blob;
