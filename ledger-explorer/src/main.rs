@@ -3,7 +3,6 @@ use tokio_stream::StreamExt; // for flat_map // Ensure StreamExt trait is in sco
 use ledger_explorer::graph::apply_cypher_vec_stream_to_neo4j;
 use ledger_explorer::cypher;
 use client::stream_updates::stream_updates;
-use ledger_api::v2::admin::user_management_service_client::UserManagementServiceClient;
 use tracing::{info, debug, error};
 
 #[derive(Parser)]
@@ -77,12 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 parties = ?parties,
                 "Configuration loaded"
             );
-
-            debug!("Connecting to ledger at {}", ledger_url);
-            let channel = tonic::transport::Channel::from_shared(ledger_url.clone())?
-                .connect()
-                .await?;
-            info!("Successfully connected to ledger");
+            info!("Obtaining JWT token for reader user: {}", reader_user);
 
             let token = client::jwt::fake_jwt_for_user(&reader_user);
             info!("JWT token obtained successfully");

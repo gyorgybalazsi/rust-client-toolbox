@@ -9,6 +9,6 @@ password="password"
 [ledger]
 reader_user="all_reader_user"
 parties=[
-    "Bob::12202a7f4e8ec4dd77132209767e53c4c383338deab5ff7b5dffd263173dcc3820ad",
-  "Alice::12202a7f4e8ec4dd77132209767e53c4c383338deab5ff7b5dffd263173dcc3820ad"]
+  "Alice::1220b235f1ec22f48b1305b6fb7590c76e48d97145e133a5f4906c83fd276946ca54",
+  "Bob::1220b235f1ec22f48b1305b6fb7590c76e48d97145e133a5f4906c83fd276946ca54"]
 url="http://localhost:6865"
