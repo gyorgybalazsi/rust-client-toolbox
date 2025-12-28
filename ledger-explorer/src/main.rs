@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Sync { config_file } => {
             info!("Starting sync command");
 
-            debug!("Reading configuration from TOML file");
+            debug!(config_path = ?config_file, "Reading configuration from TOML file");
             let config = match config_file {
                 Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config from specified path"),
                 None => ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml"),
@@ -99,7 +99,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let update_stream = stream_updates(Some(&token), 0, None, parties.clone(), ledger_url).await?;
             let cypher_stream = update_stream.map(|update| {
                 match &update {
-                    Ok(_) => debug!("Processing update from stream"),
+                    Ok(response) => {
+                        let offset = response.update.as_ref().map(|u| match u {
+                            ledger_api::v2::get_updates_response::Update::Transaction(tx) => tx.offset,
+                            ledger_api::v2::get_updates_response::Update::Reassignment(r) => r.offset,
+                            ledger_api::v2::get_updates_response::Update::OffsetCheckpoint(c) => c.offset,
+                            ledger_api::v2::get_updates_response::Update::TopologyTransaction(t) => t.offset,
+                        });
+                        debug!(offset = ?offset, "Processing update from stream");
+                    }
                     Err(e) => error!(error = %e, "Error in update stream"),
                 }
                 cypher::get_updates_response_to_cypher(&update.unwrap())

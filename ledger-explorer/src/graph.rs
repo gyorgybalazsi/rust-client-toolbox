@@ -17,7 +17,7 @@ where
 {
     info!("Connecting to Neo4j at {}", uri);
     let graph = Graph::new(uri, user, pass)?;
-    debug!("Successfully connected to Neo4j");
+    debug!(uri = %uri, user = %user, "Successfully connected to Neo4j");
 
     // Query max offset before update
     debug!("Querying max offset before update");
@@ -39,10 +39,10 @@ where
     while let Some(cypher_vec) = query_stream.next().await {
         batch_count += 1;
         let query_count = cypher_vec.len();
-        debug!("Processing batch {}: {} queries", batch_count, query_count);
+        debug!(batch = batch_count, query_count = query_count, "Processing batch");
 
         for (i, cq) in cypher_vec.iter().enumerate() {
-            debug!("Batch {} query {}: {}", batch_count, i + 1, cq.cypher);
+            debug!(batch = batch_count, query_index = i + 1, cypher = %cq.cypher, "Executing query");
         }
 
         let queries: Vec<_> = cypher_vec.into_iter().map(|cq| cq.query).collect();
@@ -50,7 +50,7 @@ where
         txn.run_queries(queries).await?;
         txn.commit().await?;
 
-        debug!("Batch {} committed successfully", batch_count);
+        debug!(batch = batch_count, query_count = query_count, "Batch committed successfully");
     }
 
     let update_time_ms = start_time.elapsed().as_millis();
