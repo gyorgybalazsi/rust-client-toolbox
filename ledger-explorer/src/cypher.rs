@@ -224,13 +224,6 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
     let markers = structure_markers_from_transaction(transaction);
     let edges = extract_edges(&markers);
     for (offset, parent_id, child_id) in &edges {
-        // TODO why the query! macro does not work here?
-        // cypher_statements.push(query!(
-        //     "MATCH (parent {{offset: {offset}, node_id: {parent_id}}}), (child {{offset: {offset}, node_id: {child_id}}}) CREATE (parent)-[:CONSEQUENCE]->(child);",
-        //     offset = offset,
-        //     parent_id = parent_id as i64,
-        //     child_id = child_id as i64,
-        // ));
         cypher_statements.push(cypher_query!(
             "MATCH (parent {offset: $offset, node_id: $parent_id}), \
             (child {offset: $offset, node_id: $child_id}) \

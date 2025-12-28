@@ -4,6 +4,7 @@ use ledger_explorer::graph::apply_cypher_vec_stream_to_neo4j;
 use ledger_explorer::cypher;
 use client::stream_updates::stream_updates;
 use tracing::{info, debug, error};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(name = "ledger-explorer")]
@@ -36,13 +37,26 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing subscriber with env filter (defaults to INFO, configurable via RUST_LOG)
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive(tracing::Level::INFO.into()))
-        .init();
-
     let cli = Cli::parse();
+
+    // Determine log level from config file if available (for Sync command), otherwise default to INFO
+    let log_level = match &cli.command {
+        Commands::Sync { config_file } => {
+            let config = match config_file {
+                Some(path) => ledger_explorer::config::read_config(path).ok(),
+                None => ledger_explorer::config::read_config_from_toml().ok(),
+            };
+            config.map(|c| c.logging.level).unwrap_or_else(|| "info".to_string())
+        }
+        _ => "info".to_string(),
+    };
+
+    // Initialize tracing subscriber with env filter (RUST_LOG takes precedence over config)
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(&log_level));
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .init();
 
     match cli.command {
         Commands::PrintCypher { access_token, url, begin_exclusive, end_inclusive, party } => {
