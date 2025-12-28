@@ -42,7 +42,7 @@ where
         debug!(batch = batch_count, query_count = query_count, "Processing batch");
 
         for (i, cq) in cypher_vec.iter().enumerate() {
-            debug!(batch = batch_count, query_index = i + 1, cypher = %cq.cypher, "Executing query");
+            debug!(batch = batch_count, query_index = i + 1, query = %cq, "Executing query");
         }
 
         let queries: Vec<_> = cypher_vec.into_iter().map(|cq| cq.query).collect();

@@ -6,10 +6,11 @@ use ledger_api::v2::{GetUpdatesResponse, get_updates_response::Update, event::Ev
 use neo4rs::Query;
 use crate::api_record_to_json::{api_record_to_json, choice_argument_json};
 
-/// Wrapper around neo4rs::Query that preserves the cypher string for debugging
+/// Wrapper around neo4rs::Query that preserves the cypher string and params for debugging
 #[derive(Clone)]
 pub struct CypherQuery {
     pub cypher: String,
+    pub params: Vec<(String, String)>,
     pub query: Query,
 }
 
@@ -17,7 +18,25 @@ impl std::fmt::Debug for CypherQuery {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CypherQuery")
             .field("cypher", &self.cypher)
+            .field("params", &self.params)
             .finish()
+    }
+}
+
+impl std::fmt::Display for CypherQuery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.cypher)?;
+        if !self.params.is_empty() {
+            write!(f, " [")?;
+            for (i, (key, value)) in self.params.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}={}", key, value)?;
+            }
+            write!(f, "]")?;
+        }
+        Ok(())
     }
 }
 
@@ -26,6 +45,7 @@ impl CypherQuery {
         Self {
             query: Query::new(cypher.clone()),
             cypher,
+            params: Vec::new(),
         }
     }
 }
@@ -34,8 +54,11 @@ macro_rules! cypher_query {
     ($cypher:expr, $($key:ident = $value:expr),* $(,)?) => {{
         let cypher_str = $cypher.to_string();
         let query = Query::new(cypher_str.clone())
-            $(.param(stringify!($key), $value))*;
-        CypherQuery { cypher: cypher_str, query }
+            $(.param(stringify!($key), $value.clone()))*;
+        let params = vec![
+            $((stringify!($key).to_string(), format!("{:?}", $value))),*
+        ];
+        CypherQuery { cypher: cypher_str, params, query }
     }};
 }
 
