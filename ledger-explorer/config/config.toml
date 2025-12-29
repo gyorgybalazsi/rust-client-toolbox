@@ -7,8 +7,8 @@ user="neo4j"
 password="password"
 
 [ledger]
-reader_user="all_reader_user"
+fake_jwt_user="alice"
 parties=[
-  "Alice::1220b156f64bdba326f6b822c0d43111452eefd28b91de5d2658009eb532e602055e",
-  "Bob::1220b156f64bdba326f6b822c0d43111452eefd28b91de5d2658009eb532e602055e",]
+  "Bob::12202a795d567e4faf0a1e7750e58a3ad51af4a5e15da97edc16c47d82b1d10c62b3",
+  "Alice::12202a795d567e4faf0a1e7750e58a3ad51af4a5e15da97edc16c47d82b1d10c62b3"]
 url="http://localhost:6865"

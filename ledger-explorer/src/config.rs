@@ -29,7 +29,7 @@ pub struct Neo4jConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct LedgerConfig {
-    pub reader_user: String,
+    pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
 }
@@ -74,7 +74,7 @@ mod tests {
         assert!(!cfg.neo4j.uri.is_empty());
         assert!(!cfg.neo4j.user.is_empty());
         assert!(!cfg.neo4j.password.is_empty());
-        assert!(!cfg.ledger.reader_user.is_empty());
+        assert!(!cfg.ledger.fake_jwt_user.is_empty());
         assert!(!cfg.ledger.url.is_empty());    
         Ok(())
     }

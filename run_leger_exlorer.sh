@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cargo run --bin ledger-explorer sync
+cargo run --bin ledger-explorer sync --access-token "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJhdWQiOiJzb21lUGFydGljaXBhbnRJZCIsImV4cCI6MTc2NzA5MTE5OCwiaXNzIjoic29tZUlkcElkIiwic2NvcGUiOiJkYW1sX2xlZGdlcl9hcGkiLCJzdWIiOiJhbGljZSJ9"

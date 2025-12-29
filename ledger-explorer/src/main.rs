@@ -32,6 +32,9 @@ enum Commands {
         /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
         #[arg(long)]
         config_file: Option<String>,
+        /// Optional access token (if not provided, a fake JWT token will be generated for the reader user)
+        #[arg(long)]
+        access_token: Option<String>,
     }
 }
 
@@ -41,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Determine log level from config file if available (for Sync command), otherwise default to INFO
     let log_level = match &cli.command {
-        Commands::Sync { config_file } => {
+        Commands::Sync { config_file, .. } => {
             let config = match config_file {
                 Some(path) => ledger_explorer::config::read_config(path).ok(),
                 None => ledger_explorer::config::read_config_from_toml().ok(),
@@ -69,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("End transaction");
             }
         }
-        Commands::Sync { config_file } => {
+        Commands::Sync { config_file, access_token } => {
             info!("Starting sync command");
 
             debug!(config_path = ?config_file, "Reading configuration from TOML file");
@@ -77,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config from specified path"),
                 None => ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml"),
             };
-            let reader_user = config.ledger.reader_user;
+            let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
             let neo4j_uri = config.neo4j.uri;
@@ -90,10 +93,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 parties = ?parties,
                 "Configuration loaded"
             );
-            info!("Obtaining JWT token for reader user: {}", reader_user);
 
-            let token = client::jwt::fake_jwt_for_user(&reader_user);
-            info!("JWT token obtained successfully");
+            let token = match access_token {
+                Some(token) => {
+                    info!("Using provided access token");
+                    token
+                }
+                None => {
+                    info!("Generating fake JWT token for user: {}", fake_jwt_user);
+                    client::jwt::fake_jwt_for_user(&fake_jwt_user)
+                }
+            };
+            info!("Token ready");
 
             info!("Starting update stream from offset 0");
             let update_stream = stream_updates(Some(&token), 0, None, parties.clone(), ledger_url).await?;
