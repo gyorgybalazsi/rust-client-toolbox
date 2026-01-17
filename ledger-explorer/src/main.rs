@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
-use tokio_stream::StreamExt; // for flat_map // Ensure StreamExt trait is in scope for flat_map
-use ledger_explorer::graph::apply_cypher_vec_stream_to_neo4j;
+use tokio_stream::StreamExt;
 use ledger_explorer::cypher;
+use ledger_explorer::sync::{run_resilient_sync, SyncConfig, BackoffConfig};
+use client::jwt::TokenSource;
 use client::stream_updates::stream_updates;
-use tracing::{info, debug, error};
+use tracing::{info, debug};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -76,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Sync { config_file, access_token, use_keycloak } => {
-            info!("Starting sync command");
+            info!("Starting resilient sync command");
 
             debug!(config_path = ?config_file, "Reading configuration from TOML file");
             let config = match config_file {
@@ -86,10 +87,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
-            let begin_offset = config.ledger.begin_offset;
-            let neo4j_uri = config.neo4j.uri;
-            let neo4j_user = config.neo4j.user;
-            let neo4j_pass = config.neo4j.password;
+            let neo4j_uri = config.neo4j.uri.clone();
+            let neo4j_user = config.neo4j.user.clone();
+            let neo4j_pass = config.neo4j.password.clone();
             let keycloak_config = config.keycloak;
 
             info!(
@@ -99,56 +99,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "Configuration loaded"
             );
 
-            let token = match access_token {
+            // Determine token source for automatic renewal
+            let token_source = match access_token {
                 Some(token) => {
-                    info!("Using provided access token");
-                    token
+                    info!("Using provided static access token");
+                    TokenSource::Static(token)
                 }
                 None if use_keycloak => {
                     let kc_config = keycloak_config
                         .expect("--use-keycloak requires [keycloak] section in config file");
-                    info!("Obtaining JWT token from Keycloak at {}", kc_config.token_endpoint);
-                    let client_config = client::jwt::KeycloakConfig {
+                    info!("Using Keycloak for JWT token management at {}", kc_config.token_endpoint);
+                    TokenSource::Keycloak(client::jwt::KeycloakConfig {
                         client_id: kc_config.client_id,
                         client_secret: kc_config.client_secret,
                         token_endpoint: kc_config.token_endpoint,
-                    };
-                    client::jwt::keycloak_jwt(&client_config).await?
+                    })
                 }
                 None => {
-                    info!("Generating fake JWT token for user: {}", fake_jwt_user);
-                    client::jwt::fake_jwt_for_user(&fake_jwt_user)
+                    info!("Using fake JWT token for user: {}", fake_jwt_user);
+                    TokenSource::FakeJwt(fake_jwt_user)
                 }
             };
-            info!("Token ready");
 
-            info!("Starting update stream from offset {}", begin_offset);
-            let update_stream = stream_updates(Some(&token), begin_offset, None, parties.clone(), ledger_url).await?;
-            let cypher_stream = update_stream.map(|update| {
-                match &update {
-                    Ok(response) => {
-                        let offset = response.update.as_ref().map(|u| match u {
-                            ledger_api::v2::get_updates_response::Update::Transaction(tx) => tx.offset,
-                            ledger_api::v2::get_updates_response::Update::Reassignment(r) => r.offset,
-                            ledger_api::v2::get_updates_response::Update::OffsetCheckpoint(c) => c.offset,
-                            ledger_api::v2::get_updates_response::Update::TopologyTransaction(t) => t.offset,
-                        });
-                        debug!(offset = ?offset, "Processing update from stream");
-                    }
-                    Err(e) => error!(error = %e, "Error in update stream"),
-                }
-                cypher::get_updates_response_to_cypher(&update.unwrap())
-            });
+            let sync_config = SyncConfig {
+                ledger_url,
+                parties,
+                neo4j_uri,
+                neo4j_user,
+                neo4j_pass,
+            };
 
-            info!("Applying cypher queries to Neo4j");
-            let (before, after, update_time) = apply_cypher_vec_stream_to_neo4j(&neo4j_uri, &neo4j_user, &neo4j_pass, cypher_stream).await?;
-
-            info!(
-                before_offset = ?before,
-                after_offset = ?after,
-                update_time_ms = ?update_time,
-                "Neo4j graph sync completed"
-            );
+            info!("Starting resilient sync loop (will auto-reconnect on failures, resume from Neo4j checkpoint)");
+            run_resilient_sync(sync_config, token_source, BackoffConfig::default()).await?;
         }
     }
 

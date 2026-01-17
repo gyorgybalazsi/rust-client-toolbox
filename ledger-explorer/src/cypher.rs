@@ -2,7 +2,7 @@ use chrono::DateTime;
 use client::utils::{
     extract_contract_ids_from_value, extract_edges, structure_markers_from_transaction,
 };
-use ledger_api::v2::{GetUpdatesResponse, get_updates_response::Update, event::Event};
+use ledger_api::v2::{CreatedEvent, GetUpdatesResponse, get_updates_response::Update, event::Event};
 use neo4rs::Query;
 use crate::api_record_to_json::{api_record_to_json, choice_argument_json};
 
@@ -339,6 +339,75 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             offset = offset,
         ));
     }
+
+    cypher_statements
+}
+
+/// Converts a CreatedEvent (from ACS) into Cypher statements to create a Created node.
+/// The offset is set to -1 to indicate this is from ACS (pre-existing contract).
+/// The node_id is set to 0 since there's no transaction structure for ACS contracts.
+pub fn created_event_to_cypher(created: &CreatedEvent) -> Vec<CypherQuery> {
+    let mut cypher_statements = Vec::new();
+
+    let label = created
+        .template_id
+        .as_ref()
+        .map(|id| format!("{}@ACS", id.entity_name))
+        .unwrap_or_else(|| "unknown@ACS".to_string());
+    let template_name = created
+        .template_id
+        .as_ref()
+        .map(|id| format!("{}.{}", id.module_name, id.entity_name))
+        .unwrap_or_else(|| "unknown".to_string());
+    let signatories_str = created
+        .signatories
+        .iter()
+        .map(|s| format!("'{}'", s))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let created_at = created
+        .created_at
+        .as_ref()
+        .and_then(|ts| {
+            let dt = DateTime::from_timestamp(ts.seconds, ts.nanos as u32);
+            dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+        })
+        .unwrap_or_default();
+    let create_arguments_json = created
+        .create_arguments
+        .as_ref()
+        .map(|args| api_record_to_json(args))
+        .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
+        .unwrap_or("null".to_string());
+    let create_arguments = created
+        .create_arguments
+        .as_ref()
+        .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
+        .unwrap_or("null".to_string());
+
+    // Use MERGE to avoid duplicates if contract already exists
+    cypher_statements.push(cypher_query!(
+        "MERGE (c:Created { contract_id: $contract_id }) \
+        ON CREATE SET \
+        c.template_name = $template_name, \
+        c.label = $label, \
+        c.signatories = $signatories, \
+        c.offset = $offset, \
+        c.node_id = $node_id, \
+        c.created_at = $created_at, \
+        c.create_arguments = $create_arguments, \
+        c.create_arguments_json = $create_arguments_json, \
+        c.from_acs = true",
+        contract_id = created.contract_id.clone(),
+        template_name = template_name.clone(),
+        label = label.clone(),
+        signatories = signatories_str.clone(),
+        offset = -1i64, // ACS contracts have no specific offset
+        node_id = 0i32,
+        created_at = created_at.clone(),
+        create_arguments = create_arguments,
+        create_arguments_json = create_arguments_json,
+    ));
 
     cypher_statements
 }

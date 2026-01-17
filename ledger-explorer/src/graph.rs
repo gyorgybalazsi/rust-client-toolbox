@@ -1,10 +1,36 @@
 use futures_util::Stream;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use neo4rs::{Graph, query};
 use std::time::Instant;
 use tokio_stream::StreamExt;
+use anyhow::Result;
 
 pub use crate::cypher::CypherQuery;
+
+/// Queries Neo4j for the maximum offset stored in the graph.
+/// This is used to determine where to resume processing after a restart.
+pub async fn get_last_processed_offset(uri: &str, user: &str, pass: &str) -> Result<Option<i64>> {
+    debug!("Connecting to Neo4j at {} to query last offset", uri);
+    let graph = Graph::new(uri, user, pass)?;
+
+    // Exclude ACS contracts (offset = -1) from the max offset calculation
+    let mut result = graph.execute(query("MATCH (n) WHERE n.offset IS NOT NULL AND n.offset >= 0 RETURN max(n.offset) as max_offset")).await?;
+    match result.next().await {
+        Ok(Some(row)) => {
+            let offset = row.get::<Option<i64>>("max_offset")?;
+            info!("Last processed offset from Neo4j: {:?}", offset);
+            Ok(offset)
+        }
+        Ok(None) => {
+            info!("No offset found in Neo4j (empty database)");
+            Ok(None)
+        }
+        Err(e) => {
+            warn!("Failed to query last offset from Neo4j: {}", e);
+            Err(e.into())
+        }
+    }
+}
 
 pub async fn apply_cypher_vec_stream_to_neo4j<S>(
     uri: &str,

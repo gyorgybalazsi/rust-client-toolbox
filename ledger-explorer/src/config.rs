@@ -42,9 +42,6 @@ pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
-    /// Starting offset for streaming updates (default: 0)
-    #[serde(default)]
-    pub begin_offset: i64,
 }
 
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {

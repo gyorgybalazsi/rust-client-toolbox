@@ -9,3 +9,4 @@ pub mod run_script;
 pub mod party_management;
 pub mod user_management;
 pub mod get_blob;
+pub mod active_contracts;
