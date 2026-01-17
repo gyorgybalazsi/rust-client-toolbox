@@ -32,9 +32,12 @@ enum Commands {
         /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
         #[arg(long)]
         config_file: Option<String>,
-        /// Optional access token (if not provided, a fake JWT token will be generated for the reader user)
+        /// Optional access token (if not provided, will try Keycloak config, then fall back to fake JWT)
         #[arg(long)]
         access_token: Option<String>,
+        /// Use Keycloak to obtain a real JWT token (requires [keycloak] section in config)
+        #[arg(long)]
+        use_keycloak: bool,
     }
 }
 
@@ -72,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("End transaction");
             }
         }
-        Commands::Sync { config_file, access_token } => {
+        Commands::Sync { config_file, access_token, use_keycloak } => {
             info!("Starting sync command");
 
             debug!(config_path = ?config_file, "Reading configuration from TOML file");
@@ -83,9 +86,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
+            let begin_offset = config.ledger.begin_offset;
             let neo4j_uri = config.neo4j.uri;
             let neo4j_user = config.neo4j.user;
             let neo4j_pass = config.neo4j.password;
+            let keycloak_config = config.keycloak;
 
             info!(
                 ledger_url = %ledger_url,
@@ -99,6 +104,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     info!("Using provided access token");
                     token
                 }
+                None if use_keycloak => {
+                    let kc_config = keycloak_config
+                        .expect("--use-keycloak requires [keycloak] section in config file");
+                    info!("Obtaining JWT token from Keycloak at {}", kc_config.token_endpoint);
+                    let client_config = client::jwt::KeycloakConfig {
+                        client_id: kc_config.client_id,
+                        client_secret: kc_config.client_secret,
+                        token_endpoint: kc_config.token_endpoint,
+                    };
+                    client::jwt::keycloak_jwt(&client_config).await?
+                }
                 None => {
                     info!("Generating fake JWT token for user: {}", fake_jwt_user);
                     client::jwt::fake_jwt_for_user(&fake_jwt_user)
@@ -106,8 +122,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             info!("Token ready");
 
-            info!("Starting update stream from offset 0");
-            let update_stream = stream_updates(Some(&token), 0, None, parties.clone(), ledger_url).await?;
+            info!("Starting update stream from offset {}", begin_offset);
+            let update_stream = stream_updates(Some(&token), begin_offset, None, parties.clone(), ledger_url).await?;
             let cypher_stream = update_stream.map(|update| {
                 match &update {
                     Ok(response) => {

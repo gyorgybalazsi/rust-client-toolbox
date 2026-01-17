@@ -8,6 +8,16 @@ pub struct Config {
     pub logging: LoggingConfig,
     pub neo4j: Neo4jConfig,
     pub ledger: LedgerConfig,
+    /// Optional Keycloak configuration for obtaining real JWT tokens
+    pub keycloak: Option<KeycloakConfig>,
+}
+
+/// Keycloak OAuth2 configuration for client credentials flow
+#[derive(Debug, Deserialize, Clone)]
+pub struct KeycloakConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub token_endpoint: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +42,9 @@ pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
+    /// Starting offset for streaming updates (default: 0)
+    #[serde(default)]
+    pub begin_offset: i64,
 }
 
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {

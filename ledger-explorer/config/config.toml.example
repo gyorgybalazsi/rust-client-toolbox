@@ -1,0 +1,27 @@
+[logging]
+level = "info"
+
+[neo4j]
+uri = "neo4j://127.0.0.1:7687"
+user = "neo4j"
+password = "password"
+
+[ledger]
+# User ID for generating fake JWT tokens (used when --use-keycloak is not specified)
+fake_jwt_user = "alice"
+# Party IDs to subscribe to for updates
+parties = ["Alice::1220..."]
+# Ledger API URL
+url = "http://localhost:6865"
+# Starting offset for streaming updates (default: 0)
+# Set this to the pruned offset if the ledger has been pruned
+begin_offset = 0
+
+# Optional: Keycloak configuration for obtaining real JWT tokens
+# Uncomment and configure to use --use-keycloak flag
+
+# DevNet configuration example
+# [keycloak]
+# client_id = "your-client-id"
+# client_secret = "your-client-secret"
+# token_endpoint = "https://keycloak.example.com/auth/realms/your-realm/protocol/openid-connect/token"

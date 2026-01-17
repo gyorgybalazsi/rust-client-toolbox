@@ -26,3 +26,4 @@ tracing-subscriber = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
 zip = { workspace = true }
+reqwest = { workspace = true }

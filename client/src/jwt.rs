@@ -1,7 +1,9 @@
 use serde_json::json;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{Utc, Duration};
-use anyhow::Result;
+use anyhow::{Result, Context};
+use serde::Deserialize;
+use tracing::{debug, info};
 
 /// Creates a fake JWT token for a given party, valid for 24 hours from creation.
 /// This token is unsigned (alg: "none") and suitable for local dev/testing.
@@ -80,4 +82,75 @@ pub fn fake_jwt_for_user(
 
     // No signature for alg "none"
     format!("{}.{}", header_enc, payload_enc)
+}
+
+/// Configuration for Keycloak OAuth2 client credentials flow
+#[derive(Debug, Clone, Deserialize)]
+pub struct KeycloakConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub token_endpoint: String,
+}
+
+/// Response from Keycloak token endpoint
+#[derive(Debug, Deserialize)]
+struct KeycloakTokenResponse {
+    access_token: String,
+    #[allow(dead_code)]
+    expires_in: Option<u64>,
+    #[allow(dead_code)]
+    token_type: Option<String>,
+}
+
+/// Fetches a real JWT token from Keycloak using OAuth2 client credentials flow.
+///
+/// This is suitable for production environments where you need a properly signed JWT
+/// from a Keycloak server.
+///
+/// # Arguments
+/// * `config` - Keycloak configuration containing client_id, client_secret, and token_endpoint
+///
+/// # Returns
+/// * `Result<String>` - The access token on success
+pub async fn keycloak_jwt(config: &KeycloakConfig) -> Result<String> {
+    debug!(
+        token_endpoint = %config.token_endpoint,
+        client_id = %config.client_id,
+        "Requesting JWT token from Keycloak"
+    );
+
+    let client = reqwest::Client::new();
+
+    let params = [
+        ("grant_type", "client_credentials"),
+        ("client_id", &config.client_id),
+        ("client_secret", &config.client_secret),
+    ];
+
+    let response = client
+        .post(&config.token_endpoint)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .form(&params)
+        .send()
+        .await
+        .with_context(|| format!("Failed to send request to Keycloak at {}", config.token_endpoint))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+        anyhow::bail!(
+            "Keycloak token request failed with status {}: {}",
+            status,
+            body
+        );
+    }
+
+    let token_response: KeycloakTokenResponse = response
+        .json()
+        .await
+        .context("Failed to parse Keycloak token response")?;
+
+    info!("Successfully obtained JWT token from Keycloak");
+
+    Ok(token_response.access_token)
 }
