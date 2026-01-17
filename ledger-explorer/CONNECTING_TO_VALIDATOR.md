@@ -120,7 +120,7 @@ If you see `PERMISSION_DENIED: Claims do not authorize to read data for party`, 
 
 ### Pruned Data Errors
 
-If you see `PARTICIPANT_PRUNED_DATA_ACCESSED`, update the `begin_offset` in your config to the value mentioned in the error message.
+If you see `PARTICIPANT_PRUNED_DATsA_ACCESSED`, update the `begin_offset` in your config to the value mentioned in the error message.
 
 ### Connection Refused
 
