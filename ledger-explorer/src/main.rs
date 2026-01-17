@@ -4,6 +4,7 @@ use ledger_explorer::cypher;
 use ledger_explorer::sync::{run_resilient_sync, SyncConfig, BackoffConfig};
 use client::jwt::TokenSource;
 use client::stream_updates::stream_updates;
+use ledger_api::v2::Identifier;
 use tracing::{info, debug};
 use tracing_subscriber::EnvFilter;
 
@@ -28,6 +29,15 @@ enum Commands {
         begin_exclusive: i64,
         #[arg(long)]
         end_inclusive: Option<i64>,
+        /// Optional template filter package names (e.g., "#splice-amulet")
+        #[arg(long)]
+        template_package: Vec<String>,
+        /// Optional template filter module names (e.g., "Splice.Amulet")
+        #[arg(long)]
+        template_module: Vec<String>,
+        /// Optional template filter entity names (e.g., "FeaturedAppActivityMarker")
+        #[arg(long)]
+        template_entity: Vec<String>,
     },
     Sync {
         /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
@@ -66,9 +76,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     match cli.command {
-        Commands::PrintCypher { access_token, url, begin_exclusive, end_inclusive, party } => {
+        Commands::PrintCypher { access_token, url, begin_exclusive, end_inclusive, party, template_package, template_module, template_entity } => {
             let parties = vec![party];
-            let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
+            // Build Identifier list from parallel CLI args
+            let template_identifiers: Vec<Identifier> = template_package.into_iter()
+                .zip(template_module.into_iter())
+                .zip(template_entity.into_iter())
+                .map(|((package, module), entity)| Identifier {
+                    package_id: package,
+                    module_name: module,
+                    entity_name: entity,
+                })
+                .collect();
+            let template_filters: Option<&[Identifier]> = if template_identifiers.is_empty() { None } else { Some(&template_identifiers) };
+            let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url, template_filters).await?;
             while let Some(response) = update_stream.next().await {
                 let cypher_queries = cypher::get_updates_response_to_cypher(&response?);
                 println!("Start transaction");
@@ -87,6 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
+            let template_filters = config.ledger.template_filters;
             let neo4j_uri = config.neo4j.uri.clone();
             let neo4j_user = config.neo4j.user.clone();
             let neo4j_pass = config.neo4j.password.clone();
@@ -96,6 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ledger_url = %ledger_url,
                 neo4j_uri = %neo4j_uri,
                 parties = ?parties,
+                template_filters = ?template_filters,
                 "Configuration loaded"
             );
 
@@ -127,6 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 neo4j_uri,
                 neo4j_user,
                 neo4j_pass,
+                template_filters,
             };
 
             info!("Starting resilient sync loop (will auto-reconnect on failures, resume from Neo4j checkpoint)");

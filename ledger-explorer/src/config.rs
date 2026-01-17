@@ -37,11 +37,25 @@ pub struct Neo4jConfig {
     pub password: String,
 }
 
+/// Template filter configuration with explicit field names.
+/// Uses the package-name reference format with "#" prefix.
+#[derive(Debug, Deserialize, Clone)]
+pub struct TemplateFilterConfig {
+    /// Package name with "#" prefix (e.g., "#splice-amulet")
+    pub package_name: String,
+    /// Dot-separated module name (e.g., "Splice.Amulet")
+    pub module_name: String,
+    /// Entity/template name (e.g., "FeaturedAppActivityMarker")
+    pub entity_name: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
+    /// Optional list of contract templates to filter on.
+    pub template_filters: Option<Vec<TemplateFilterConfig>>,
 }
 
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {

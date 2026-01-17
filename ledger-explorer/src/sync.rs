@@ -5,12 +5,14 @@ use tracing::{debug, error, info, warn};
 use anyhow::Result;
 use neo4rs::{Graph, query};
 use std::time::Instant;
+use ledger_api::v2::Identifier;
 
 use client::jwt::{TokenManager, TokenSource};
 use client::stream_updates::stream_updates;
 use client::active_contracts::stream_active_contracts;
 use client::ledger_end::get_pruning_offset;
 use crate::cypher;
+use crate::config::TemplateFilterConfig;
 use crate::graph::{apply_cypher_vec_stream_to_neo4j, get_last_processed_offset};
 
 /// Configuration for the resilient sync process
@@ -20,6 +22,22 @@ pub struct SyncConfig {
     pub neo4j_uri: String,
     pub neo4j_user: String,
     pub neo4j_pass: String,
+    /// Optional list of contract templates to filter on.
+    /// If empty or None, all templates are included.
+    pub template_filters: Option<Vec<TemplateFilterConfig>>,
+}
+
+impl SyncConfig {
+    /// Converts template_filters to a Vec<Identifier> for use with the client library.
+    pub fn get_template_identifiers(&self) -> Option<Vec<Identifier>> {
+        self.template_filters.as_ref().map(|filters| {
+            filters.iter().map(|f| Identifier {
+                package_id: f.package_name.clone(),
+                module_name: f.module_name.clone(),
+                entity_name: f.entity_name.clone(),
+            }).collect()
+        })
+    }
 }
 
 /// Exponential backoff configuration
@@ -52,8 +70,9 @@ async fn load_acs_to_neo4j(
     parties: &[String],
     token: &str,
     acs_offset: i64,
+    template_filters: Option<&[Identifier]>,
 ) -> Result<()> {
-    info!("Loading Active Contract Set (ACS) into Neo4j at offset {}...", acs_offset);
+    info!("Loading Active Contract Set (ACS) into Neo4j at offset {}, template_filters={:?}...", acs_offset, template_filters);
     let start_time = Instant::now();
 
     // Connect to Neo4j
@@ -65,6 +84,7 @@ async fn load_acs_to_neo4j(
         acs_offset,
         parties.to_vec(),
         ledger_url.to_string(),
+        template_filters,
     ).await?;
 
     let mut contract_count = 0u64;
@@ -205,6 +225,9 @@ pub async fn run_resilient_sync(
             }
         };
 
+        // Get template identifiers for this iteration
+        let template_identifiers = sync_config.get_template_identifiers();
+
         // Load ACS on first run if not already loaded (at the starting offset)
         if !acs_loaded_checked {
             match is_acs_loaded(
@@ -226,6 +249,7 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        template_identifiers.as_deref(),
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -252,6 +276,7 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        template_identifiers.as_deref(),
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -271,7 +296,7 @@ pub async fn run_resilient_sync(
             }
         }
 
-        info!("Starting stream from offset {}", begin_offset);
+        info!("Starting stream from offset {}, template_filters={:?}", begin_offset, sync_config.template_filters);
 
         // Start the update stream
         let update_stream = match stream_updates(
@@ -280,6 +305,7 @@ pub async fn run_resilient_sync(
             None,
             sync_config.parties.clone(),
             sync_config.ledger_url.clone(),
+            template_identifiers.as_deref(),
         ).await {
             Ok(stream) => stream,
             Err(e) => {

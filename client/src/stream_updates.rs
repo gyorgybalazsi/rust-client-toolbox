@@ -1,29 +1,32 @@
 use ledger_api::v2::{
-    EventFormat, GetUpdatesRequest, TransactionFormat, TransactionShape, UpdateFormat,
+    EventFormat, GetUpdatesRequest, Identifier, TransactionFormat, TransactionShape, UpdateFormat,
     update_service_client::UpdateServiceClient,
 };
-use crate::utils::build_filters_by_party;
+use crate::utils::build_filters_by_party_with_identifiers;
 use tonic::metadata::MetadataValue;
 use anyhow::{Context, Result};
 use tracing::{info, debug, error};
 
 /// Streams ledger updates for the given parties, starting after `begin_exclusive` offset.
 /// `end_inclusive` is optional; if set, the stream will end at that offset.
+/// `template_filters` is optional; if provided, only events matching those templates are streamed.
 pub async fn stream_updates(
     access_token: Option<&str>,
     begin_exclusive: i64,
     end_inclusive: Option<i64>,
     parties: Vec<String>,
     url: String,
+    template_filters: Option<&[Identifier]>,
 ) -> Result<tonic::Streaming<ledger_api::v2::GetUpdatesResponse>> {
     info!(
-        "Starting stream_updates at {}:{}: url={}, begin_exclusive={}, end_inclusive={:?}, parties={:?}",
+        "Starting stream_updates at {}:{}: url={}, begin_exclusive={}, end_inclusive={:?}, parties={:?}, template_filters={:?}",
         file!(),
         line!(),
         url,
         begin_exclusive,
         end_inclusive,
-        parties
+        parties,
+        template_filters
     );
 
     debug!("Connecting to update service at {}:{}: {}", file!(), line!(), url);
@@ -38,7 +41,7 @@ pub async fn stream_updates(
         }
     };
 
-    let filters_by_party = build_filters_by_party(&parties);
+    let filters_by_party = build_filters_by_party_with_identifiers(&parties, template_filters);
     debug!("Built filters_by_party at {}:{}: {:?}", file!(), line!(), filters_by_party);
 
     let event_format = EventFormat {
