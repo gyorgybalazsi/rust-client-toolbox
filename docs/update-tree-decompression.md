@@ -113,6 +113,33 @@ A node is a **root node** if it has no ancestors in the visible event set. Root 
 - **Time**: O(n log n) for sorting, O(n) for the stack-based traversal
 - **Space**: O(n) for the sorted copy and stack
 
+## Comparison with Digital Asset's Java Implementation
+
+The official Digital Asset Java bindings use a recursive approach to build the tree:
+
+```java
+private static void buildNodeTree(Node parent, LinkedList<Node> nodes) {
+  while (!nodes.isEmpty() &&
+         nodes.peekFirst().nodeId <= parent.lastDescendantNodeId) {
+    parent.children.add(nodes.peekFirst());
+    buildNodeTree(nodes.pollFirst(), nodes);
+  }
+}
+```
+
+Both implementations use the **same underlying algorithm**: the nested set model where a node is a descendant of another if its `node_id` falls within the parent's `[node_id, last_descendant_node_id]` interval. The parent-child relationships produced are identical.
+
+### Why the Rust implementation uses a different style
+
+| Aspect | Java (recursive) | Rust (iterative with stack) |
+|--------|------------------|----------------------------|
+| Stack usage | Implicit call stack | Explicit heap-allocated stack |
+| Stack overflow risk | Yes, on deep trees | No |
+| Output format | Mutable `Node` objects with `children` lists | Immutable edge list `Vec<(offset, parent_id, child_id)>` |
+| Flexibility | Tree structure only | Edge list can build any representation |
+
+The iterative approach with an explicit stack is idiomatic Rust and avoids potential stack overflow on deeply nested transaction trees. The edge list output is more flexible—consumers can build tree structures, use it for graph algorithms, or process edges directly without additional transformation.
+
 ## Related Representations
 
 This encoding is related to:
@@ -123,14 +150,17 @@ This encoding is related to:
 
 ## References
 
-1. **Canton/Daml 3.3 Release Notes** - Universal Event Streams and tree encoding changes
+1. **Digital Asset Java Bindings** - Official tree decompression implementation
+   https://github.com/digital-asset/daml/blob/main/sdk/canton/community/bindings-java/src/main/java/com/daml/ledger/javaapi/data/Transaction.java
+
+2. **Canton/Daml 3.3 Release Notes** - Universal Event Streams and tree encoding changes
    https://blog.digitalasset.com/developers/release-notes/splice-0.4.0-canton-3.3#a_universal_event-Streams
 
-2. **Nested Set Model** - ScienceDirect Computer Science Topics
+3. **Nested Set Model** - ScienceDirect Computer Science Topics
    https://www.sciencedirect.com/topics/computer-science/nested-set-model
 
-3. **Nested Set Model** - Wikipedia
+4. **Nested Set Model** - Wikipedia
    https://en.wikipedia.org/wiki/Nested_set_model
 
-4. **Canton Ledger API Protobuf** - `ExercisedEvent.last_descendant_node_id` field definition
+5. **Canton Ledger API Protobuf** - `ExercisedEvent.last_descendant_node_id` field definition
    `ledger-api/resources/protobuf/com/daml/ledger/api/v2/event.proto`
