@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use tokio_stream::StreamExt;
 use ledger_explorer::cypher;
+use ledger_explorer::config;
 use ledger_explorer::sync::{run_resilient_sync, SyncConfig, BackoffConfig};
 use client::jwt::TokenSource;
 use client::stream_updates::stream_updates;
@@ -109,10 +110,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let kc_config = keycloak_config
                         .expect("--use-keycloak requires [keycloak] section in config file");
                     info!("Using Keycloak for JWT token management at {}", kc_config.token_endpoint);
+
+                    // Convert from ledger-explorer's KeycloakConfig to client's KeycloakConfig
+                    let auth_method = match kc_config.auth_method {
+                        config::KeycloakAuthMethod::ClientCredentials { client_secret } => {
+                            client::jwt::KeycloakAuthMethod::ClientCredentials { client_secret }
+                        }
+                        config::KeycloakAuthMethod::Password { username, password, client_secret } => {
+                            client::jwt::KeycloakAuthMethod::Password { username, password, client_secret }
+                        }
+                    };
+
                     TokenSource::Keycloak(client::jwt::KeycloakConfig {
                         client_id: kc_config.client_id,
-                        client_secret: kc_config.client_secret,
                         token_endpoint: kc_config.token_endpoint,
+                        auth_method,
                     })
                 }
                 None => {

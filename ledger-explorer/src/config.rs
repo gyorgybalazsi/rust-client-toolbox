@@ -12,12 +12,30 @@ pub struct Config {
     pub keycloak: Option<KeycloakConfig>,
 }
 
-/// Keycloak OAuth2 configuration for client credentials flow
+/// Authentication method for Keycloak
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "grant_type", rename_all = "snake_case")]
+pub enum KeycloakAuthMethod {
+    /// OAuth2 Client Credentials flow (service accounts)
+    ClientCredentials {
+        client_secret: String,
+    },
+    /// OAuth2 Resource Owner Password Credentials flow (user authentication)
+    Password {
+        username: String,
+        password: String,
+        #[serde(default)]
+        client_secret: Option<String>,
+    },
+}
+
+/// Keycloak OAuth2 configuration
 #[derive(Debug, Deserialize, Clone)]
 pub struct KeycloakConfig {
     pub client_id: String,
-    pub client_secret: String,
     pub token_endpoint: String,
+    #[serde(flatten)]
+    pub auth_method: KeycloakAuthMethod,
 }
 
 #[derive(Debug, Deserialize)]

@@ -17,11 +17,29 @@ url = "http://localhost:6865"
 # Set this to the pruned offset if the ledger has been pruned
 begin_offset = 0
 
+# ============================================================================
 # Optional: Keycloak configuration for obtaining real JWT tokens
-# Uncomment and configure to use --use-keycloak flag
+# Uncomment ONE of the sections below and configure to use --use-keycloak flag
+# ============================================================================
 
-# DevNet configuration example
+# ----------------------------------------------------------------------------
+# OPTION 1: Client Credentials Flow (for service accounts / machine-to-machine)
+# Use this when you have a service account with client_id and client_secret
+# ----------------------------------------------------------------------------
+# [keycloak]
+# client_id = "your-service-account-client-id"
+# token_endpoint = "https://keycloak.example.com/auth/realms/your-realm/protocol/openid-connect/token"
+# grant_type = "client_credentials"
+# client_secret = "your-client-secret"
+
+# ----------------------------------------------------------------------------
+# OPTION 2: Password Flow (for user authentication)
+# Use this when authenticating as a specific user with username/password
+# ----------------------------------------------------------------------------
 # [keycloak]
 # client_id = "your-client-id"
-# client_secret = "your-client-secret"
 # token_endpoint = "https://keycloak.example.com/auth/realms/your-realm/protocol/openid-connect/token"
+# grant_type = "password"
+# username = "your-username"
+# password = "your-password"
+# # client_secret = "optional-client-secret"  # Only needed if client requires authentication

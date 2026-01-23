@@ -87,12 +87,30 @@ pub fn fake_jwt_for_user(
     format!("{}.{}", header_enc, payload_enc)
 }
 
-/// Configuration for Keycloak OAuth2 client credentials flow
+/// Authentication method for Keycloak
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "grant_type", rename_all = "snake_case")]
+pub enum KeycloakAuthMethod {
+    /// OAuth2 Client Credentials flow (service accounts)
+    ClientCredentials {
+        client_secret: String,
+    },
+    /// OAuth2 Resource Owner Password Credentials flow (user authentication)
+    Password {
+        username: String,
+        password: String,
+        #[serde(default)]
+        client_secret: Option<String>,
+    },
+}
+
+/// Configuration for Keycloak OAuth2 authentication
 #[derive(Debug, Clone, Deserialize)]
 pub struct KeycloakConfig {
     pub client_id: String,
-    pub client_secret: String,
     pub token_endpoint: String,
+    #[serde(flatten)]
+    pub auth_method: KeycloakAuthMethod,
 }
 
 /// Response from Keycloak token endpoint
@@ -105,13 +123,14 @@ struct KeycloakTokenResponse {
     token_type: Option<String>,
 }
 
-/// Fetches a real JWT token from Keycloak using OAuth2 client credentials flow.
+/// Fetches a real JWT token from Keycloak using OAuth2 authentication.
 ///
+/// Supports both client credentials and password grant flows.
 /// This is suitable for production environments where you need a properly signed JWT
 /// from a Keycloak server.
 ///
 /// # Arguments
-/// * `config` - Keycloak configuration containing client_id, client_secret, and token_endpoint
+/// * `config` - Keycloak configuration containing authentication details
 ///
 /// # Returns
 /// * `Result<String>` - The access token on success
@@ -124,11 +143,23 @@ pub async fn keycloak_jwt(config: &KeycloakConfig) -> Result<String> {
 
     let client = reqwest::Client::new();
 
-    let params = [
-        ("grant_type", "client_credentials"),
-        ("client_id", &config.client_id),
-        ("client_secret", &config.client_secret),
-    ];
+    // Build parameters based on authentication method
+    let mut params = vec![("client_id", config.client_id.clone())];
+
+    match &config.auth_method {
+        KeycloakAuthMethod::ClientCredentials { client_secret } => {
+            params.push(("grant_type", "client_credentials".to_string()));
+            params.push(("client_secret", client_secret.clone()));
+        }
+        KeycloakAuthMethod::Password { username, password, client_secret } => {
+            params.push(("grant_type", "password".to_string()));
+            params.push(("username", username.clone()));
+            params.push(("password", password.clone()));
+            if let Some(secret) = client_secret {
+                params.push(("client_secret", secret.clone()));
+            }
+        }
+    }
 
     let response = client
         .post(&config.token_endpoint)
@@ -168,6 +199,8 @@ struct KeycloakTokenResponseWithExpiry {
 }
 
 /// Fetches a JWT token from Keycloak and returns both the token and its expiry duration.
+///
+/// Supports both client credentials and password grant flows.
 pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String, u64)> {
     debug!(
         token_endpoint = %config.token_endpoint,
@@ -177,11 +210,23 @@ pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String
 
     let client = reqwest::Client::new();
 
-    let params = [
-        ("grant_type", "client_credentials"),
-        ("client_id", &config.client_id),
-        ("client_secret", &config.client_secret),
-    ];
+    // Build parameters based on authentication method
+    let mut params = vec![("client_id", config.client_id.clone())];
+
+    match &config.auth_method {
+        KeycloakAuthMethod::ClientCredentials { client_secret } => {
+            params.push(("grant_type", "client_credentials".to_string()));
+            params.push(("client_secret", client_secret.clone()));
+        }
+        KeycloakAuthMethod::Password { username, password, client_secret } => {
+            params.push(("grant_type", "password".to_string()));
+            params.push(("username", username.clone()));
+            params.push(("password", password.clone()));
+            if let Some(secret) = client_secret {
+                params.push(("client_secret", secret.clone()));
+            }
+        }
+    }
 
     let response = client
         .post(&config.token_endpoint)
