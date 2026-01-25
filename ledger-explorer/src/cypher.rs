@@ -3,7 +3,8 @@ use client::utils::{
     extract_contract_ids_from_value, extract_edges, structure_markers_from_transaction,
 };
 use ledger_api::v2::{CreatedEvent, GetUpdatesResponse, get_updates_response::Update, event::Event};
-use neo4rs::Query;
+use neo4rs::{Query, BoltType};
+use serde_json::json;
 use crate::api_record_to_json::{api_record_to_json, choice_argument_json};
 
 /// Wrapper around neo4rs::Query that preserves the cypher string and params for debugging
@@ -48,6 +49,18 @@ impl CypherQuery {
             params: Vec::new(),
         }
     }
+
+    pub fn with_param<T: Into<BoltType>>(mut self, key: &str, value: T) -> Self {
+        self.query = self.query.param(key, value);
+        self
+    }
+
+    pub fn with_json_param(mut self, key: &str, value: serde_json::Value) -> Self {
+        // Convert serde_json::Value to BoltType
+        let bolt_value: BoltType = value.try_into().unwrap_or(BoltType::Null(neo4rs::BoltNull));
+        self.query = self.query.param(key, bolt_value);
+        self
+    }
 }
 
 macro_rules! cypher_query {
@@ -63,6 +76,7 @@ macro_rules! cypher_query {
 }
 
 /// Converts a GetUpdatesResponse directly into a Vec of Cypher statements.
+/// Uses UNWIND for batched operations to minimize round-trips.
 /// Returns an empty vector if update is None or not a Transaction.
 pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<CypherQuery> {
     let mut cypher_statements = Vec::new();
@@ -74,6 +88,8 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
     let Update::Transaction(transaction) = update else {
         return cypher_statements;
     };
+
+    let offset = transaction.offset;
 
     // Create Transaction node with metadata
     let effective_at = transaction
@@ -127,6 +143,11 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
         tracestate = tracestate.clone(),
     ));
 
+    // Collect Created events for batch insert
+    let mut created_events: Vec<serde_json::Value> = Vec::new();
+    // Collect Exercised events for batch insert
+    let mut exercised_events: Vec<serde_json::Value> = Vec::new();
+
     for event in &transaction.events {
         match &event.event {
             Some(Event::Created(created)) => {
@@ -165,27 +186,18 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                     .as_ref()
                     .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
                     .unwrap_or("null".to_string());
-                cypher_statements.push(cypher_query!(
-                    "CREATE (c:Created { \
-                    contract_id: $contract_id, \
-                    template_name: $template_name, \
-                    label: $label, \
-                    signatories: $signatories, \
-                    offset: $offset, \
-                    node_id: $node_id, \
-                    created_at: $created_at, \
-                    create_arguments: $create_arguments, \
-                    create_arguments_json: $create_arguments_json })",
-                    contract_id = created.contract_id.clone(),
-                    template_name = template_name.clone(),
-                    label = label.clone(),
-                    signatories = signatories_str.clone(),
-                    offset = created.offset,
-                    node_id = created.node_id,
-                    created_at = created_at.clone(),
-                    create_arguments = create_arguments,
-                    create_arguments_json = create_arguments_json,
-                ));
+
+                created_events.push(json!({
+                    "contract_id": created.contract_id,
+                    "template_name": template_name,
+                    "label": label,
+                    "signatories": signatories_str,
+                    "offset": created.offset,
+                    "node_id": created.node_id,
+                    "created_at": created_at,
+                    "create_arguments": create_arguments,
+                    "create_arguments_json": create_arguments_json
+                }));
             }
             Some(Event::Exercised(exercised)) => {
                 let label = format!("{}@{}", exercised.choice, exercised.offset);
@@ -211,133 +223,204 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                     .as_ref()
                     .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
                     .unwrap_or("null".to_string());
-                cypher_statements.push(cypher_query!(
-                    "CREATE (e:Exercised { \
-                    label: $label, \
-                    choice_name: $choice_name, \
-                    target_contract_id: $target_contract_id, \
-                    acting_parties: $acting_parties, \
-                    offset: $offset, \
-                    node_id: $node_id, \
-                    consuming: $consuming, \
-                    result_contract_ids: $result_contract_ids, \
-                    last_descendant_node_id: $last_descendant_node_id, \
-                    transaction_effective_at: $transaction_effective_at, \
-                    choice_argument: $choice_argument, \
-                    choice_argument_json: $choice_argument_json })",
-                    label = label.clone(),
-                    choice_name = choice_name.clone(),
-                    target_contract_id = exercised.contract_id.clone(),
-                    acting_parties = acting_parties_str.clone(),
-                    offset = exercised.offset,
-                    node_id = exercised.node_id,
-                    consuming = exercised.consuming,
-                    result_contract_ids = serde_json::to_string(&extract_contract_ids_from_value(&exercised.exercise_result)).unwrap_or("[]".to_string()),
-                    last_descendant_node_id = exercised.last_descendant_node_id,
-                    transaction_effective_at = transaction_effective_at.clone(),
-                    choice_argument = choice_argument,
-                    choice_argument_json = choice_argument_json,
-                ));
+
+                exercised_events.push(json!({
+                    "label": label,
+                    "choice_name": choice_name,
+                    "target_contract_id": exercised.contract_id,
+                    "acting_parties": acting_parties_str,
+                    "offset": exercised.offset,
+                    "node_id": exercised.node_id,
+                    "consuming": exercised.consuming,
+                    "result_contract_ids": serde_json::to_string(&extract_contract_ids_from_value(&exercised.exercise_result)).unwrap_or("[]".to_string()),
+                    "last_descendant_node_id": exercised.last_descendant_node_id,
+                    "transaction_effective_at": transaction_effective_at,
+                    "choice_argument": choice_argument,
+                    "choice_argument_json": choice_argument_json
+                }));
             }
             _ => {}
         }
     }
 
-    // Add CONSEQUENCE edges based on structure_markers_from_transaction and extract_edges
-    let markers = structure_markers_from_transaction(transaction);
-    let edges = extract_edges(&markers);
-    for (offset, parent_id, child_id) in &edges {
-        cypher_statements.push(cypher_query!(
-            "MATCH (parent {offset: $offset, node_id: $parent_id}), \
-            (child {offset: $offset, node_id: $child_id}) \
-            CREATE (parent)-[:CONSEQUENCE]->(child)",
-            offset = *offset,
-            parent_id = *parent_id,
-            child_id = *child_id,
-        ));
+    // Batch insert Created nodes using UNWIND
+    if !created_events.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $events AS e \
+            CREATE (c:Created { \
+            contract_id: e.contract_id, \
+            template_name: e.template_name, \
+            label: e.label, \
+            signatories: e.signatories, \
+            offset: e.offset, \
+            node_id: e.node_id, \
+            created_at: e.created_at, \
+            create_arguments: e.create_arguments, \
+            create_arguments_json: e.create_arguments_json })".to_string()
+        ).with_json_param("events", serde_json::Value::Array(created_events));
+        cypher_statements.push(cypher);
     }
 
-    // Add TARGET relationships: from Exercised node to Created node with matching contract_id
+    // Batch insert Exercised nodes using UNWIND
+    if !exercised_events.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $events AS e \
+            CREATE (ex:Exercised { \
+            label: e.label, \
+            choice_name: e.choice_name, \
+            target_contract_id: e.target_contract_id, \
+            acting_parties: e.acting_parties, \
+            offset: e.offset, \
+            node_id: e.node_id, \
+            consuming: e.consuming, \
+            result_contract_ids: e.result_contract_ids, \
+            last_descendant_node_id: e.last_descendant_node_id, \
+            transaction_effective_at: e.transaction_effective_at, \
+            choice_argument: e.choice_argument, \
+            choice_argument_json: e.choice_argument_json })".to_string()
+        ).with_json_param("events", serde_json::Value::Array(exercised_events));
+        cypher_statements.push(cypher);
+    }
+
+    // Batch CONSEQUENCE edges
+    let markers = structure_markers_from_transaction(transaction);
+    let edges = extract_edges(&markers);
+    if !edges.is_empty() {
+        let edges_data: Vec<serde_json::Value> = edges
+            .iter()
+            .map(|(off, parent_id, child_id)| json!({
+                "offset": off,
+                "parent_id": parent_id,
+                "child_id": child_id
+            }))
+            .collect();
+        let cypher = CypherQuery::new(
+            "UNWIND $edges AS e \
+            MATCH (parent {offset: e.offset, node_id: e.parent_id}), \
+            (child {offset: e.offset, node_id: e.child_id}) \
+            CREATE (parent)-[:CONSEQUENCE]->(child)".to_string()
+        ).with_json_param("edges", serde_json::Value::Array(edges_data));
+        cypher_statements.push(cypher);
+    }
+
+    // Batch TARGET and CONSUMES relationships for Exercised events
+    let mut target_rels: Vec<serde_json::Value> = Vec::new();
+    let mut consumes_rels: Vec<serde_json::Value> = Vec::new();
+
     for event in &transaction.events {
         if let Some(Event::Exercised(exercised)) = &event.event {
-            cypher_statements.push(cypher_query!(
-                "MATCH (e:Exercised {offset: $offset, node_id: $node_id}), \
-                (c:Created {contract_id: $target_contract_id}) \
-                CREATE (e)-[:TARGET]->(c)",
-                offset = exercised.offset,
-                node_id = exercised.node_id,
-                target_contract_id = exercised.contract_id.clone(),
-            ));
+            target_rels.push(json!({
+                "offset": exercised.offset,
+                "node_id": exercised.node_id,
+                "target_contract_id": exercised.contract_id
+            }));
             if exercised.consuming {
-                cypher_statements.push(cypher_query!(
-                    "MATCH (e:Exercised {offset: $offset, node_id: $node_id}), \
-                    (c:Created {contract_id: $target_contract_id}) \
-                    CREATE (e)-[:CONSUMES]->(c)",
-                    offset = exercised.offset,
-                    node_id = exercised.node_id,
-                    target_contract_id = exercised.contract_id.clone(),
-                ));
+                consumes_rels.push(json!({
+                    "offset": exercised.offset,
+                    "node_id": exercised.node_id,
+                    "target_contract_id": exercised.contract_id
+                }));
             }
         }
+    }
+
+    if !target_rels.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $rels AS r \
+            MATCH (e:Exercised {offset: r.offset, node_id: r.node_id}), \
+            (c:Created {contract_id: r.target_contract_id}) \
+            CREATE (e)-[:TARGET]->(c)".to_string()
+        ).with_json_param("rels", serde_json::Value::Array(target_rels));
+        cypher_statements.push(cypher);
+    }
+
+    if !consumes_rels.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $rels AS r \
+            MATCH (e:Exercised {offset: r.offset, node_id: r.node_id}), \
+            (c:Created {contract_id: r.target_contract_id}) \
+            CREATE (e)-[:CONSUMES]->(c)".to_string()
+        ).with_json_param("rels", serde_json::Value::Array(consumes_rels));
+        cypher_statements.push(cypher);
     }
 
     // Identify root-level events (those not in any edge as a child)
     let child_node_ids: std::collections::HashSet<i32> = edges.iter().map(|(_, _, child)| *child).collect();
 
-    // Collect requester parties from root-level events and connect Transaction to root-level events
-    let offset = transaction.offset;
+    // Collect root-level events for ACTION relationships
+    let mut root_exercised: Vec<serde_json::Value> = Vec::new();
+    let mut root_created: Vec<serde_json::Value> = Vec::new();
     let mut requesting_parties: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for event in &transaction.events {
         if let Some(Event::Exercised(exercised)) = &event.event {
-            // Root-level Exercised event: not a child of any other event
             if !child_node_ids.contains(&exercised.node_id) {
-                // Collect acting parties as requesting parties
                 for party in &exercised.acting_parties {
                     requesting_parties.insert(party.clone());
                 }
-                // Connect Transaction to this root-level Exercised event
-                cypher_statements.push(cypher_query!(
-                    "MATCH (t:Transaction {offset: $offset}), \
-                    (e:Exercised {offset: $offset, node_id: $node_id}) \
-                    CREATE (t)-[:ACTION]->(e)",
-                    offset = offset,
-                    node_id = exercised.node_id,
-                ));
+                root_exercised.push(json!({
+                    "offset": offset,
+                    "node_id": exercised.node_id
+                }));
             }
         }
         if let Some(Event::Created(created)) = &event.event {
-            // Root-level Created event: not a child of any other event
             if !child_node_ids.contains(&created.node_id) {
-                // Collect signatories as requesting parties
                 for party in &created.signatories {
                     requesting_parties.insert(party.clone());
                 }
-                // Connect Transaction to this root-level Created event
-                cypher_statements.push(cypher_query!(
-                    "MATCH (t:Transaction {offset: $offset}), \
-                    (c:Created {offset: $offset, node_id: $node_id}) \
-                    CREATE (t)-[:ACTION]->(c)",
-                    offset = offset,
-                    node_id = created.node_id,
-                ));
+                root_created.push(json!({
+                    "offset": offset,
+                    "node_id": created.node_id
+                }));
             }
         }
     }
 
-    // Create Party nodes and connect them to the Transaction
-    for party in &requesting_parties {
-        cypher_statements.push(cypher_query!(
-            "MERGE (p:Party {party_id: $party_id})",
-            party_id = party.clone(),
-        ));
-        cypher_statements.push(cypher_query!(
-            "MATCH (p:Party {party_id: $party_id}), \
-            (t:Transaction {offset: $offset}) \
-            CREATE (p)-[:REQUESTED]->(t)",
-            party_id = party.clone(),
-            offset = offset,
-        ));
+    // Batch ACTION relationships for root-level Exercised events
+    if !root_exercised.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $rels AS r \
+            MATCH (t:Transaction {offset: r.offset}), \
+            (e:Exercised {offset: r.offset, node_id: r.node_id}) \
+            CREATE (t)-[:ACTION]->(e)".to_string()
+        ).with_json_param("rels", serde_json::Value::Array(root_exercised));
+        cypher_statements.push(cypher);
+    }
+
+    // Batch ACTION relationships for root-level Created events
+    if !root_created.is_empty() {
+        let cypher = CypherQuery::new(
+            "UNWIND $rels AS r \
+            MATCH (t:Transaction {offset: r.offset}), \
+            (c:Created {offset: r.offset, node_id: r.node_id}) \
+            CREATE (t)-[:ACTION]->(c)".to_string()
+        ).with_json_param("rels", serde_json::Value::Array(root_created));
+        cypher_statements.push(cypher);
+    }
+
+    // Batch Party MERGE and REQUESTED relationships
+    if !requesting_parties.is_empty() {
+        let parties: Vec<serde_json::Value> = requesting_parties
+            .iter()
+            .map(|p| json!({"party_id": p, "offset": offset}))
+            .collect();
+
+        // First MERGE all parties
+        let merge_cypher = CypherQuery::new(
+            "UNWIND $parties AS p \
+            MERGE (party:Party {party_id: p.party_id})".to_string()
+        ).with_json_param("parties", serde_json::Value::Array(parties.clone()));
+        cypher_statements.push(merge_cypher);
+
+        // Then create REQUESTED relationships
+        let rel_cypher = CypherQuery::new(
+            "UNWIND $parties AS p \
+            MATCH (party:Party {party_id: p.party_id}), \
+            (t:Transaction {offset: p.offset}) \
+            CREATE (party)-[:REQUESTED]->(t)".to_string()
+        ).with_json_param("parties", serde_json::Value::Array(parties));
+        cypher_statements.push(rel_cypher);
     }
 
     cypher_statements
