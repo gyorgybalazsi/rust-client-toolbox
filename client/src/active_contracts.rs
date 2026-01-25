@@ -73,7 +73,19 @@ pub async fn stream_active_contracts(
     let response = client
         .get_active_contracts(req)
         .await
-        .with_context(|| "Failed to get active contracts from ledger")?;
+        .map_err(|e| {
+            tracing::error!(
+                "gRPC error getting active contracts: code={:?}, message={}, details={:?}",
+                e.code(),
+                e.message(),
+                e.details()
+            );
+            anyhow::anyhow!(
+                "Failed to get active contracts from ledger: {} (code: {:?})",
+                e.message(),
+                e.code()
+            )
+        })?;
 
     let mut grpc_stream = response.into_inner();
 

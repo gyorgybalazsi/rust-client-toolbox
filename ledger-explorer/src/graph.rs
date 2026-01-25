@@ -61,22 +61,49 @@ where
     let start_time = Instant::now();
     info!("Starting to process query stream");
 
+    // Batch multiple updates together for better Neo4j throughput
+    const BATCH_SIZE: usize = 20; // Commit every 20 updates (~500 queries)
     let mut batch_count = 0u64;
+    let mut pending_queries: Vec<neo4rs::Query> = Vec::new();
+    let mut updates_in_batch = 0usize;
+
     while let Some(cypher_vec) = query_stream.next().await {
         batch_count += 1;
         let query_count = cypher_vec.len();
-        debug!(batch = batch_count, query_count = query_count, "Processing batch");
+        debug!(batch = batch_count, query_count = query_count, "Received update");
 
-        for (i, cq) in cypher_vec.iter().enumerate() {
-            debug!(batch = batch_count, query_index = i + 1, query = %cq, "Executing query");
+        // Accumulate queries
+        let query_count_this_update = cypher_vec.len();
+        pending_queries.extend(cypher_vec.into_iter().map(|cq| cq.query));
+        updates_in_batch += 1;
+
+        if updates_in_batch == 1 {
+            info!("First update received, {} queries", query_count_this_update);
         }
 
-        let queries: Vec<_> = cypher_vec.into_iter().map(|cq| cq.query).collect();
-        let mut txn = graph.start_txn().await?;
-        txn.run_queries(queries).await?;
-        txn.commit().await?;
+        // Commit when batch is full
+        if updates_in_batch >= BATCH_SIZE {
+            let total_queries = pending_queries.len();
+            info!("Starting batch commit: {} updates, {} queries", updates_in_batch, total_queries);
+            let commit_start = Instant::now();
+            let mut txn = graph.start_txn().await?;
+            txn.run_queries(pending_queries).await?;
+            txn.commit().await?;
+            let commit_time = commit_start.elapsed();
+            info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
+                  BATCH_SIZE, total_queries, commit_time, batch_count);
+            pending_queries = Vec::new();
+            updates_in_batch = 0;
+        }
+    }
 
-        debug!(batch = batch_count, query_count = query_count, "Batch committed successfully");
+    // Commit any remaining queries
+    if !pending_queries.is_empty() {
+        debug!(updates = updates_in_batch, queries = pending_queries.len(), "Committing final batch");
+        let mut txn = graph.start_txn().await?;
+        txn.run_queries(pending_queries).await?;
+        txn.commit().await?;
+        info!("Committed final batch of {} updates", updates_in_batch);
     }
 
     let update_time_ms = start_time.elapsed().as_millis();

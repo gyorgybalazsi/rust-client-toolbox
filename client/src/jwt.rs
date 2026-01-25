@@ -253,7 +253,80 @@ pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String
 
     info!("Successfully obtained JWT token from Keycloak (expires in {} seconds)", token_response.expires_in);
 
+    // Log the decoded JWT claims for debugging
+    log_jwt_claims(&token_response.access_token);
+
     Ok((token_response.access_token, token_response.expires_in))
+}
+
+/// Decodes and logs the claims from a JWT token for debugging purposes.
+/// Only logs the payload (middle part), not the signature.
+pub fn log_jwt_claims(token: &str) {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        warn!("Invalid JWT format - cannot decode claims");
+        return;
+    }
+
+    // Decode the payload (second part)
+    match general_purpose::URL_SAFE_NO_PAD.decode(parts[1]) {
+        Ok(decoded) => {
+            match String::from_utf8(decoded) {
+                Ok(json_str) => {
+                    match serde_json::from_str::<serde_json::Value>(&json_str) {
+                        Ok(claims) => {
+                            info!("JWT claims: {}", serde_json::to_string_pretty(&claims).unwrap_or_else(|_| json_str.clone()));
+
+                            // Log specific important claims
+                            if let Some(sub) = claims.get("sub") {
+                                info!("  sub (subject): {}", sub);
+                            }
+                            if let Some(aud) = claims.get("aud") {
+                                info!("  aud (audience): {}", aud);
+                            }
+                            if let Some(scope) = claims.get("scope") {
+                                info!("  scope: {}", scope);
+                            }
+                            if let Some(act_as) = claims.get("actAs") {
+                                info!("  actAs (authorized parties): {}", act_as);
+                            }
+                            if let Some(read_as) = claims.get("readAs") {
+                                info!("  readAs (read-only parties): {}", read_as);
+                            }
+                            // Canton-specific claims
+                            if let Some(party) = claims.get("party") {
+                                info!("  party: {}", party);
+                            }
+                            if let Some(parties) = claims.get("parties") {
+                                info!("  parties: {}", parties);
+                            }
+                        }
+                        Err(e) => {
+                            debug!("JWT payload (raw): {}", json_str);
+                            warn!("Failed to parse JWT claims as JSON: {}", e);
+                        }
+                    }
+                }
+                Err(e) => warn!("JWT payload is not valid UTF-8: {}", e),
+            }
+        }
+        Err(e) => {
+            // Try with standard base64 padding
+            let padded = match parts[1].len() % 4 {
+                2 => format!("{}==", parts[1]),
+                3 => format!("{}=", parts[1]),
+                _ => parts[1].to_string(),
+            };
+            match general_purpose::STANDARD.decode(&padded) {
+                Ok(decoded) => {
+                    if let Ok(json_str) = String::from_utf8(decoded) {
+                        info!("JWT payload: {}", json_str);
+                    }
+                }
+                Err(_) => warn!("Failed to decode JWT payload: {}", e),
+            }
+        }
+    }
 }
 
 /// Token source configuration - determines how tokens are obtained

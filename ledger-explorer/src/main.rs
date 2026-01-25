@@ -5,8 +5,9 @@ use ledger_explorer::config;
 use ledger_explorer::sync::{run_resilient_sync, SyncConfig, BackoffConfig};
 use client::jwt::TokenSource;
 use client::stream_updates::stream_updates;
-use tracing::{info, debug};
+use tracing::{info, debug, warn};
 use tracing_subscriber::EnvFilter;
+use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "ledger-explorer")]
@@ -29,6 +30,21 @@ enum Commands {
         begin_exclusive: i64,
         #[arg(long)]
         end_inclusive: Option<i64>,
+    },
+    /// Benchmark raw Canton stream throughput (no Neo4j writes)
+    Benchmark {
+        /// Path to config.toml file
+        #[arg(long)]
+        config_file: Option<String>,
+        /// Use Keycloak to obtain a real JWT token
+        #[arg(long)]
+        use_keycloak: bool,
+        /// Number of updates to process (default: 10000)
+        #[arg(long, default_value = "10000")]
+        count: u64,
+        /// Starting offset (if not specified, uses pruning offset from ledger)
+        #[arg(long)]
+        begin_offset: Option<i64>,
     },
     Sync {
         /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
@@ -76,6 +92,131 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{:?}", cypher_queries);
                 println!("End transaction");
             }
+        }
+        Commands::Benchmark { config_file, use_keycloak, count, begin_offset } => {
+            info!("Starting Canton stream benchmark (no Neo4j writes)");
+
+            let config = match config_file {
+                Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config"),
+                None => ledger_explorer::config::read_config_from_toml().expect("failed to read config"),
+            };
+            let parties = config.ledger.parties.unwrap_or_default();
+            let ledger_url = config.ledger.url;
+
+            // Get token
+            let token = if use_keycloak {
+                let kc_config = config.keycloak.expect("--use-keycloak requires [keycloak] section");
+                let auth_method = match kc_config.auth_method {
+                    config::KeycloakAuthMethod::ClientCredentials { client_secret } => {
+                        client::jwt::KeycloakAuthMethod::ClientCredentials { client_secret }
+                    }
+                    config::KeycloakAuthMethod::Password { username, password, client_secret } => {
+                        client::jwt::KeycloakAuthMethod::Password { username, password, client_secret }
+                    }
+                };
+                let kc = client::jwt::KeycloakConfig {
+                    client_id: kc_config.client_id,
+                    token_endpoint: kc_config.token_endpoint,
+                    auth_method,
+                };
+                client::jwt::keycloak_jwt(&kc).await?
+            } else {
+                client::jwt::fake_jwt_for_user(&config.ledger.fake_jwt_user)
+            };
+
+            // Determine start offset
+            let start_offset = match begin_offset {
+                Some(o) => o,
+                None => {
+                    info!("Querying pruning offset from ledger...");
+                    client::ledger_end::get_pruning_offset(&ledger_url, Some(&token)).await?
+                }
+            };
+
+            info!("Benchmark config: start_offset={}, count={}, parties={:?}", start_offset, count, parties);
+            info!("Streaming {} updates from Canton (stream only, no cypher, no neo4j)...", count);
+
+            // Benchmark 1: Raw stream only
+            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone()).await?;
+            let start_time = Instant::now();
+            let mut raw_count = 0u64;
+            let mut last_offset = start_offset;
+
+            while let Some(response) = update_stream.next().await {
+                match response {
+                    Ok(resp) => {
+                        if let Some(update) = &resp.update {
+                            last_offset = match update {
+                                ledger_api::v2::get_updates_response::Update::Transaction(tx) => tx.offset,
+                                ledger_api::v2::get_updates_response::Update::Reassignment(r) => r.offset,
+                                ledger_api::v2::get_updates_response::Update::OffsetCheckpoint(c) => c.offset,
+                                ledger_api::v2::get_updates_response::Update::TopologyTransaction(t) => t.offset,
+                            };
+                        }
+                        raw_count += 1;
+                        if raw_count >= count {
+                            break;
+                        }
+                        if raw_count % 1000 == 0 {
+                            let elapsed = start_time.elapsed().as_secs_f64();
+                            info!("[Raw Stream] {} updates, {:.1} updates/s, offset {}", raw_count, raw_count as f64 / elapsed, last_offset);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Stream error: {}", e);
+                        break;
+                    }
+                }
+            }
+            let raw_elapsed = start_time.elapsed();
+            let raw_rate = raw_count as f64 / raw_elapsed.as_secs_f64();
+            info!("=== RAW STREAM BENCHMARK ===");
+            info!("  Updates: {}", raw_count);
+            info!("  Time: {:.2}s", raw_elapsed.as_secs_f64());
+            info!("  Rate: {:.1} updates/s", raw_rate);
+            info!("  Offset range: {} -> {}", start_offset, last_offset);
+
+            // Benchmark 2: Stream + Cypher generation
+            info!("\nStreaming {} updates with Cypher generation (no neo4j)...", count);
+            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone()).await?;
+            let start_time = Instant::now();
+            let mut cypher_count = 0u64;
+            let mut total_queries = 0usize;
+
+            while let Some(response) = update_stream.next().await {
+                match response {
+                    Ok(resp) => {
+                        let queries = cypher::get_updates_response_to_cypher(&resp);
+                        total_queries += queries.len();
+                        cypher_count += 1;
+                        if cypher_count >= count {
+                            break;
+                        }
+                        if cypher_count % 1000 == 0 {
+                            let elapsed = start_time.elapsed().as_secs_f64();
+                            info!("[Stream+Cypher] {} updates, {:.1} updates/s", cypher_count, cypher_count as f64 / elapsed);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Stream error: {}", e);
+                        break;
+                    }
+                }
+            }
+            let cypher_elapsed = start_time.elapsed();
+            let cypher_rate = cypher_count as f64 / cypher_elapsed.as_secs_f64();
+            info!("=== STREAM + CYPHER BENCHMARK ===");
+            info!("  Updates: {}", cypher_count);
+            info!("  Cypher queries generated: {}", total_queries);
+            info!("  Time: {:.2}s", cypher_elapsed.as_secs_f64());
+            info!("  Rate: {:.1} updates/s", cypher_rate);
+
+            // Summary
+            info!("\n=== SUMMARY ===");
+            info!("  Raw stream:      {:.1} updates/s", raw_rate);
+            info!("  Stream + Cypher: {:.1} updates/s", cypher_rate);
+            info!("  Cypher overhead: {:.1}%", (1.0 - cypher_rate / raw_rate) * 100.0);
+            info!("  (Compare with ledger-explorer sync rate to see Neo4j write overhead)");
         }
         Commands::Sync { config_file, access_token, use_keycloak } => {
             info!("Starting resilient sync command");

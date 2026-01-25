@@ -1,6 +1,6 @@
-# Run ledger-explorer with Keycloak authentication
+# Run ledger-explorer with Keycloak authentication (release mode for performance)
 run-ledger-explorer:
-    cargo run -p ledger-explorer -- sync --use-keycloak
+    cargo run --release -p ledger-explorer -- sync --use-keycloak
 
 # Stop ledger-explorer
 stop-ledger-explorer:

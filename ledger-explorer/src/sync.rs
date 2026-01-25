@@ -69,7 +69,7 @@ async fn load_acs_to_neo4j(
 
     let mut contract_count = 0u64;
     let mut batch_queries = Vec::new();
-    const BATCH_SIZE: usize = 100;
+    const BATCH_SIZE: usize = 500;
 
     while let Some(contract_result) = acs_stream.next().await {
         match contract_result {
@@ -147,6 +147,82 @@ pub async fn run_resilient_sync(
     let token_manager_clone = Arc::clone(&token_manager);
     let _refresh_handle = token_manager_clone.start_background_refresh();
     info!("Started background JWT token refresh");
+
+    // Start background offset progress logger with ETA
+    let neo4j_uri_clone = sync_config.neo4j_uri.clone();
+    let neo4j_user_clone = sync_config.neo4j_user.clone();
+    let neo4j_pass_clone = sync_config.neo4j_pass.clone();
+    let ledger_url_clone = sync_config.ledger_url.clone();
+    let token_manager_for_progress = Arc::clone(&token_manager);
+    let _progress_handle = tokio::spawn(async move {
+        let mut prev_offset: Option<i64> = None;
+        let mut prev_time: Option<Instant> = None;
+
+        loop {
+            tokio::time::sleep(Duration::from_secs(300)).await; // 5 minutes
+
+            let current_offset = match get_last_processed_offset(&neo4j_uri_clone, &neo4j_user_clone, &neo4j_pass_clone).await {
+                Ok(Some(offset)) => offset,
+                Ok(None) => {
+                    info!("[Progress] No offset data in Neo4j yet");
+                    continue;
+                }
+                Err(e) => {
+                    warn!("[Progress] Failed to query Neo4j offset: {}", e);
+                    continue;
+                }
+            };
+
+            // Get ledger end for ETA calculation
+            let ledger_end = match token_manager_for_progress.get_token().await {
+                Ok(token) => {
+                    match client::ledger_end::get_ledger_end(&ledger_url_clone, Some(&token)).await {
+                        Ok(end) => Some(end),
+                        Err(e) => {
+                            warn!("[Progress] Failed to get ledger end: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(_) => None,
+            };
+
+            // Calculate rate and ETA
+            let rate_info = if let (Some(prev), Some(time)) = (prev_offset, prev_time) {
+                let elapsed_secs = time.elapsed().as_secs_f64();
+                let offsets_processed = current_offset - prev;
+                let rate = offsets_processed as f64 / elapsed_secs;
+
+                if rate > 0.0 {
+                    if let Some(end) = ledger_end {
+                        let remaining = end - current_offset;
+                        let eta_secs = remaining as f64 / rate;
+                        let eta_hours = eta_secs / 3600.0;
+                        format!(
+                            "rate: {:.1} offsets/s, remaining: {}, ETA: {:.1} hours",
+                            rate, remaining, eta_hours
+                        )
+                    } else {
+                        format!("rate: {:.1} offsets/s", rate)
+                    }
+                } else {
+                    "rate: stalled".to_string()
+                }
+            } else {
+                if let Some(end) = ledger_end {
+                    format!("ledger end: {}, remaining: {}", end, end - current_offset)
+                } else {
+                    "calculating...".to_string()
+                }
+            };
+
+            info!("[Progress] Neo4j offset: {}, {}", current_offset, rate_info);
+
+            prev_offset = Some(current_offset);
+            prev_time = Some(Instant::now());
+        }
+    });
+    info!("Started background progress logger (every 5 min)");
 
     let mut current_delay = backoff_config.initial_delay;
     let mut consecutive_failures = 0u32;
