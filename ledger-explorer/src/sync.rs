@@ -39,6 +39,31 @@ impl Default for BackoffConfig {
     }
 }
 
+/// Ensures required indexes exist in Neo4j for optimal query performance.
+/// Creates indexes if they don't exist (idempotent).
+async fn ensure_indexes(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> Result<()> {
+    info!("Ensuring Neo4j indexes exist...");
+    let graph = Graph::new(neo4j_uri, neo4j_user, neo4j_pass)?;
+
+    let indexes = [
+        "CREATE INDEX created_contract_id IF NOT EXISTS FOR (c:Created) ON (c.contract_id)",
+        "CREATE INDEX created_offset_node IF NOT EXISTS FOR (c:Created) ON (c.offset, c.node_id)",
+        "CREATE INDEX exercised_offset_node IF NOT EXISTS FOR (e:Exercised) ON (e.offset, e.node_id)",
+        "CREATE INDEX transaction_offset IF NOT EXISTS FOR (t:Transaction) ON (t.offset)",
+        "CREATE INDEX party_id IF NOT EXISTS FOR (p:Party) ON (p.party_id)",
+    ];
+
+    for index_query in &indexes {
+        match graph.run(query(*index_query)).await {
+            Ok(_) => debug!("Index ensured: {}", index_query),
+            Err(e) => warn!("Failed to create index (may already exist): {} - {}", index_query, e),
+        }
+    }
+
+    info!("Neo4j indexes ready");
+    Ok(())
+}
+
 /// Loads the Active Contract Set (ACS) into Neo4j at a specific offset.
 /// This ensures we have all contracts that were active at that offset before starting to stream updates.
 ///
@@ -141,6 +166,9 @@ pub async fn run_resilient_sync(
     token_source: TokenSource,
     backoff_config: BackoffConfig,
 ) -> Result<()> {
+    // Ensure indexes exist before starting sync
+    ensure_indexes(&sync_config.neo4j_uri, &sync_config.neo4j_user, &sync_config.neo4j_pass).await?;
+
     let token_manager = Arc::new(TokenManager::new(token_source));
 
     // Start background token refresh
