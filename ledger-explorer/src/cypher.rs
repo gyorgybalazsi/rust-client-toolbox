@@ -243,42 +243,19 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
         }
     }
 
-    // Batch insert Created nodes using UNWIND
+    // Batch insert Created nodes using APOC
     if !created_events.is_empty() {
         let cypher = CypherQuery::new(
-            "UNWIND $events AS e \
-            CREATE (c:Created { \
-            contract_id: e.contract_id, \
-            template_name: e.template_name, \
-            label: e.label, \
-            signatories: e.signatories, \
-            offset: e.offset, \
-            node_id: e.node_id, \
-            created_at: e.created_at, \
-            create_arguments: e.create_arguments, \
-            create_arguments_json: e.create_arguments_json })".to_string()
-        ).with_json_param("events", serde_json::Value::Array(created_events));
+            "CALL apoc.create.nodes(['Created'], $props) YIELD node RETURN count(node)".to_string()
+        ).with_json_param("props", serde_json::Value::Array(created_events));
         cypher_statements.push(cypher);
     }
 
-    // Batch insert Exercised nodes using UNWIND
+    // Batch insert Exercised nodes using APOC
     if !exercised_events.is_empty() {
         let cypher = CypherQuery::new(
-            "UNWIND $events AS e \
-            CREATE (ex:Exercised { \
-            label: e.label, \
-            choice_name: e.choice_name, \
-            target_contract_id: e.target_contract_id, \
-            acting_parties: e.acting_parties, \
-            offset: e.offset, \
-            node_id: e.node_id, \
-            consuming: e.consuming, \
-            result_contract_ids: e.result_contract_ids, \
-            last_descendant_node_id: e.last_descendant_node_id, \
-            transaction_effective_at: e.transaction_effective_at, \
-            choice_argument: e.choice_argument, \
-            choice_argument_json: e.choice_argument_json })".to_string()
-        ).with_json_param("events", serde_json::Value::Array(exercised_events));
+            "CALL apoc.create.nodes(['Exercised'], $props) YIELD node RETURN count(node)".to_string()
+        ).with_json_param("props", serde_json::Value::Array(exercised_events));
         cypher_statements.push(cypher);
     }
 
