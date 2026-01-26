@@ -119,18 +119,19 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
         .and_then(|tc| tc.tracestate.clone())
         .unwrap_or_default();
     let label = format!("TX@{}", transaction.offset);
+    // Use MERGE to avoid duplicates on reconnection
     cypher_statements.push(cypher_query!(
-        "CREATE (t:Transaction { \
-        label: $label, \
-        update_id: $update_id, \
-        command_id: $command_id, \
-        workflow_id: $workflow_id, \
-        offset: $offset, \
-        synchronizer_id: $synchronizer_id, \
-        effective_at: $effective_at, \
-        record_time: $record_time, \
-        traceparent: $traceparent, \
-        tracestate: $tracestate })",
+        "MERGE (t:Transaction { offset: $offset }) \
+        ON CREATE SET \
+        t.label = $label, \
+        t.update_id = $update_id, \
+        t.command_id = $command_id, \
+        t.workflow_id = $workflow_id, \
+        t.synchronizer_id = $synchronizer_id, \
+        t.effective_at = $effective_at, \
+        t.record_time = $record_time, \
+        t.traceparent = $traceparent, \
+        t.tracestate = $tracestate",
         label = label,
         update_id = transaction.update_id.clone(),
         command_id = transaction.command_id.clone(),
@@ -243,41 +244,95 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
         }
     }
 
-    // Batch insert Created nodes using APOC
+    // Batch MERGE Created nodes (use contract_id as unique key to avoid duplicates)
     if !created_events.is_empty() {
         let cypher = CypherQuery::new(
-            "CALL apoc.create.nodes(['Created'], $props) YIELD node RETURN count(node)".to_string()
+            "UNWIND $props AS p \
+            MERGE (c:Created { contract_id: p.contract_id }) \
+            ON CREATE SET \
+            c.template_name = p.template_name, \
+            c.label = p.label, \
+            c.signatories = p.signatories, \
+            c.offset = p.offset, \
+            c.node_id = p.node_id, \
+            c.created_at = p.created_at, \
+            c.create_arguments = p.create_arguments, \
+            c.create_arguments_json = p.create_arguments_json".to_string()
         ).with_json_param("props", serde_json::Value::Array(created_events));
         cypher_statements.push(cypher);
     }
 
-    // Batch insert Exercised nodes using APOC
+    // Batch MERGE Exercised nodes (use offset + node_id as unique key to avoid duplicates)
     if !exercised_events.is_empty() {
         let cypher = CypherQuery::new(
-            "CALL apoc.create.nodes(['Exercised'], $props) YIELD node RETURN count(node)".to_string()
+            "UNWIND $props AS p \
+            MERGE (e:Exercised { offset: p.offset, node_id: p.node_id }) \
+            ON CREATE SET \
+            e.label = p.label, \
+            e.choice_name = p.choice_name, \
+            e.target_contract_id = p.target_contract_id, \
+            e.acting_parties = p.acting_parties, \
+            e.consuming = p.consuming, \
+            e.result_contract_ids = p.result_contract_ids, \
+            e.last_descendant_node_id = p.last_descendant_node_id, \
+            e.transaction_effective_at = p.transaction_effective_at, \
+            e.choice_argument = p.choice_argument, \
+            e.choice_argument_json = p.choice_argument_json".to_string()
         ).with_json_param("props", serde_json::Value::Array(exercised_events));
         cypher_statements.push(cypher);
     }
 
-    // Batch CONSEQUENCE edges
+    // Batch CONSEQUENCE edges - split by child type for index usage
+    // Parents are always Exercised (only exercises have consequences)
+    // Children can be Created or Exercised
     let markers = structure_markers_from_transaction(transaction);
     let edges = extract_edges(&markers);
     if !edges.is_empty() {
-        let edges_data: Vec<serde_json::Value> = edges
-            .iter()
-            .map(|(off, parent_id, child_id)| json!({
+        // Collect child node_ids that are Created vs Exercised for this transaction
+        let created_node_ids: std::collections::HashSet<i32> = transaction.events.iter()
+            .filter_map(|e| match &e.event {
+                Some(Event::Created(c)) => Some(c.node_id),
+                _ => None,
+            })
+            .collect();
+
+        let mut edges_to_created: Vec<serde_json::Value> = Vec::new();
+        let mut edges_to_exercised: Vec<serde_json::Value> = Vec::new();
+
+        for (off, parent_id, child_id) in &edges {
+            let edge_data = json!({
                 "offset": off,
                 "parent_id": parent_id,
                 "child_id": child_id
-            }))
-            .collect();
-        let cypher = CypherQuery::new(
-            "UNWIND $edges AS e \
-            MATCH (parent {offset: e.offset, node_id: e.parent_id}), \
-            (child {offset: e.offset, node_id: e.child_id}) \
-            CREATE (parent)-[:CONSEQUENCE]->(child)".to_string()
-        ).with_json_param("edges", serde_json::Value::Array(edges_data));
-        cypher_statements.push(cypher);
+            });
+            if created_node_ids.contains(child_id) {
+                edges_to_created.push(edge_data);
+            } else {
+                edges_to_exercised.push(edge_data);
+            }
+        }
+
+        // Exercised -> Created edges (uses exercised_offset_node and created_offset_node indexes)
+        if !edges_to_created.is_empty() {
+            let cypher = CypherQuery::new(
+                "UNWIND $edges AS e \
+                MATCH (parent:Exercised {offset: e.offset, node_id: e.parent_id}), \
+                (child:Created {offset: e.offset, node_id: e.child_id}) \
+                MERGE (parent)-[:CONSEQUENCE]->(child)".to_string()
+            ).with_json_param("edges", serde_json::Value::Array(edges_to_created));
+            cypher_statements.push(cypher);
+        }
+
+        // Exercised -> Exercised edges (uses exercised_offset_node index for both)
+        if !edges_to_exercised.is_empty() {
+            let cypher = CypherQuery::new(
+                "UNWIND $edges AS e \
+                MATCH (parent:Exercised {offset: e.offset, node_id: e.parent_id}), \
+                (child:Exercised {offset: e.offset, node_id: e.child_id}) \
+                MERGE (parent)-[:CONSEQUENCE]->(child)".to_string()
+            ).with_json_param("edges", serde_json::Value::Array(edges_to_exercised));
+            cypher_statements.push(cypher);
+        }
     }
 
     // Batch TARGET and CONSUMES relationships for Exercised events
@@ -306,7 +361,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             "UNWIND $rels AS r \
             MATCH (e:Exercised {offset: r.offset, node_id: r.node_id}), \
             (c:Created {contract_id: r.target_contract_id}) \
-            CREATE (e)-[:TARGET]->(c)".to_string()
+            MERGE (e)-[:TARGET]->(c)".to_string()
         ).with_json_param("rels", serde_json::Value::Array(target_rels));
         cypher_statements.push(cypher);
     }
@@ -316,7 +371,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             "UNWIND $rels AS r \
             MATCH (e:Exercised {offset: r.offset, node_id: r.node_id}), \
             (c:Created {contract_id: r.target_contract_id}) \
-            CREATE (e)-[:CONSUMES]->(c)".to_string()
+            MERGE (e)-[:CONSUMES]->(c)".to_string()
         ).with_json_param("rels", serde_json::Value::Array(consumes_rels));
         cypher_statements.push(cypher);
     }
@@ -360,7 +415,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             "UNWIND $rels AS r \
             MATCH (t:Transaction {offset: r.offset}), \
             (e:Exercised {offset: r.offset, node_id: r.node_id}) \
-            CREATE (t)-[:ACTION]->(e)".to_string()
+            MERGE (t)-[:ACTION]->(e)".to_string()
         ).with_json_param("rels", serde_json::Value::Array(root_exercised));
         cypher_statements.push(cypher);
     }
@@ -371,7 +426,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             "UNWIND $rels AS r \
             MATCH (t:Transaction {offset: r.offset}), \
             (c:Created {offset: r.offset, node_id: r.node_id}) \
-            CREATE (t)-[:ACTION]->(c)".to_string()
+            MERGE (t)-[:ACTION]->(c)".to_string()
         ).with_json_param("rels", serde_json::Value::Array(root_created));
         cypher_statements.push(cypher);
     }
@@ -390,12 +445,12 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
         ).with_json_param("parties", serde_json::Value::Array(parties.clone()));
         cypher_statements.push(merge_cypher);
 
-        // Then create REQUESTED relationships
+        // Then MERGE REQUESTED relationships (avoid duplicates on reconnection)
         let rel_cypher = CypherQuery::new(
             "UNWIND $parties AS p \
             MATCH (party:Party {party_id: p.party_id}), \
             (t:Transaction {offset: p.offset}) \
-            CREATE (party)-[:REQUESTED]->(t)".to_string()
+            MERGE (party)-[:REQUESTED]->(t)".to_string()
         ).with_json_param("parties", serde_json::Value::Array(parties));
         cypher_statements.push(rel_cypher);
     }

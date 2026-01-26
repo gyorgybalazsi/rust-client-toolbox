@@ -9,7 +9,7 @@ use std::time::Instant;
 use client::jwt::{TokenManager, TokenSource};
 use client::stream_updates::stream_updates;
 use client::active_contracts::stream_active_contracts;
-use client::ledger_end::get_pruning_offset;
+use client::ledger_end::{get_pruning_offset, get_ledger_end};
 use crate::cypher;
 use crate::graph::{apply_cypher_vec_stream_to_neo4j, get_last_processed_offset};
 
@@ -153,6 +153,29 @@ async fn is_acs_loaded(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> R
     }
 }
 
+/// Clears all data from Neo4j database.
+async fn clear_neo4j_database(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> Result<()> {
+    info!("Clearing Neo4j database...");
+    let graph = Graph::new(neo4j_uri, neo4j_user, neo4j_pass)?;
+
+    // Use APOC for efficient deletion if available, otherwise fall back to batched delete
+    let delete_result = graph.run(query("CALL apoc.periodic.iterate('MATCH (n) RETURN n', 'DETACH DELETE n', {batchSize: 10000})")).await;
+
+    match delete_result {
+        Ok(_) => {
+            info!("Database cleared using APOC");
+        }
+        Err(_) => {
+            // Fall back to regular delete (may be slow for large datasets)
+            warn!("APOC not available, using standard delete (may be slow)");
+            graph.run(query("MATCH (n) DETACH DELETE n")).await?;
+            info!("Database cleared using standard delete");
+        }
+    }
+
+    Ok(())
+}
+
 /// Runs the sync process with automatic reconnection and token refresh.
 ///
 /// This function will:
@@ -161,11 +184,19 @@ async fn is_acs_loaded(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> R
 /// 3. Start streaming from that offset
 /// 4. On stream errors, reconnect with exponential backoff
 /// 5. Proactively refresh JWT tokens before they expire
+///
+/// If `fresh` is true, clears the database and starts from current ledger end.
 pub async fn run_resilient_sync(
     sync_config: SyncConfig,
     token_source: TokenSource,
     backoff_config: BackoffConfig,
+    fresh: bool,
 ) -> Result<()> {
+    // If fresh start, clear the database first
+    if fresh {
+        clear_neo4j_database(&sync_config.neo4j_uri, &sync_config.neo4j_user, &sync_config.neo4j_pass).await?;
+    }
+
     // Ensure indexes exist before starting sync
     ensure_indexes(&sync_config.neo4j_uri, &sync_config.neo4j_user, &sync_config.neo4j_pass).await?;
 
@@ -255,6 +286,7 @@ pub async fn run_resilient_sync(
     let mut current_delay = backoff_config.initial_delay;
     let mut consecutive_failures = 0u32;
     let mut acs_loaded_checked = false;
+    let mut fresh_start_offset: Option<i64> = None; // Used only on first iteration when fresh=true
 
     loop {
         // Get a fresh token
@@ -272,38 +304,62 @@ pub async fn run_resilient_sync(
         };
 
         // First, determine the starting offset
-        let begin_offset = match get_last_processed_offset(
-            &sync_config.neo4j_uri,
-            &sync_config.neo4j_user,
-            &sync_config.neo4j_pass,
-        ).await {
-            Ok(Some(offset)) => {
-                info!("Resuming from Neo4j offset: {}", offset);
-                offset
-            }
-            Ok(None) => {
-                // No data in Neo4j, query ledger for pruning offset
-                match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
-                    Ok(pruning_offset) => {
-                        info!("No existing data in Neo4j, starting from ledger pruning offset: {}", pruning_offset);
-                        pruning_offset
-                    }
-                    Err(e) => {
-                        error!("Failed to get pruning offset from ledger: {}. Starting from 0", e);
-                        0
-                    }
+        let begin_offset = if fresh && fresh_start_offset.is_none() {
+            // Fresh start: use current ledger end
+            match get_ledger_end(&sync_config.ledger_url, Some(&token)).await {
+                Ok(ledger_end) => {
+                    info!("FRESH START: Using current ledger end as starting point: {}", ledger_end);
+                    fresh_start_offset = Some(ledger_end);
+                    ledger_end
+                }
+                Err(e) => {
+                    error!("Failed to get ledger end: {}. Retrying in {:?}", e, current_delay);
+                    tokio::time::sleep(current_delay).await;
+                    current_delay = std::cmp::min(
+                        Duration::from_secs_f64(current_delay.as_secs_f64() * backoff_config.multiplier),
+                        backoff_config.max_delay,
+                    );
+                    continue;
                 }
             }
-            Err(e) => {
-                warn!("Failed to query Neo4j for last offset: {}. Querying ledger for pruning offset", e);
-                match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
-                    Ok(pruning_offset) => {
-                        info!("Starting from ledger pruning offset: {}", pruning_offset);
-                        pruning_offset
+        } else if let Some(offset) = fresh_start_offset {
+            // Fresh start already determined, use that offset
+            offset
+        } else {
+            // Normal mode: check Neo4j for resume point
+            match get_last_processed_offset(
+                &sync_config.neo4j_uri,
+                &sync_config.neo4j_user,
+                &sync_config.neo4j_pass,
+            ).await {
+                Ok(Some(offset)) => {
+                    info!("Resuming from Neo4j offset: {}", offset);
+                    offset
+                }
+                Ok(None) => {
+                    // No data in Neo4j, query ledger for pruning offset
+                    match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
+                        Ok(pruning_offset) => {
+                            info!("No existing data in Neo4j, starting from ledger pruning offset: {}", pruning_offset);
+                            pruning_offset
+                        }
+                        Err(e) => {
+                            error!("Failed to get pruning offset from ledger: {}. Starting from 0", e);
+                            0
+                        }
                     }
-                    Err(e2) => {
-                        error!("Failed to get pruning offset from ledger: {}. Starting from 0", e2);
-                        0
+                }
+                Err(e) => {
+                    warn!("Failed to query Neo4j for last offset: {}. Querying ledger for pruning offset", e);
+                    match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
+                        Ok(pruning_offset) => {
+                            info!("Starting from ledger pruning offset: {}", pruning_offset);
+                            pruning_offset
+                        }
+                        Err(e2) => {
+                            error!("Failed to get pruning offset from ledger: {}. Starting from 0", e2);
+                            0
+                        }
                     }
                 }
             }

@@ -56,6 +56,9 @@ enum Commands {
         /// Use Keycloak to obtain a real JWT token (requires [keycloak] section in config)
         #[arg(long)]
         use_keycloak: bool,
+        /// Fresh start: clear Neo4j database, load current ACS, and stream from ledger end
+        #[arg(long)]
+        fresh: bool,
     }
 }
 
@@ -218,8 +221,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("  Cypher overhead: {:.1}%", (1.0 - cypher_rate / raw_rate) * 100.0);
             info!("  (Compare with ledger-explorer sync rate to see Neo4j write overhead)");
         }
-        Commands::Sync { config_file, access_token, use_keycloak } => {
-            info!("Starting resilient sync command");
+        Commands::Sync { config_file, access_token, use_keycloak, fresh } => {
+            info!("Starting resilient sync command (fresh={})", fresh);
 
             debug!(config_path = ?config_file, "Reading configuration from TOML file");
             let config = match config_file {
@@ -282,8 +285,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 neo4j_pass,
             };
 
-            info!("Starting resilient sync loop (will auto-reconnect on failures, resume from Neo4j checkpoint)");
-            run_resilient_sync(sync_config, token_source, BackoffConfig::default()).await?;
+            if fresh {
+                info!("FRESH START: Will clear Neo4j, load current ACS, and stream from ledger end");
+            } else {
+                info!("Starting resilient sync loop (will auto-reconnect on failures, resume from Neo4j checkpoint)");
+            }
+            run_resilient_sync(sync_config, token_source, BackoffConfig::default(), fresh).await?;
         }
     }
 

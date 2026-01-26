@@ -62,7 +62,7 @@ where
     info!("Starting to process query stream");
 
     // Batch multiple updates together for better Neo4j throughput
-    const BATCH_SIZE: usize = 20; // Commit every 20 updates (~500 queries)
+    const BATCH_SIZE: usize = 100; // Commit every 100 updates for better throughput
     let mut batch_count = 0u64;
     let mut pending_queries: Vec<neo4rs::Query> = Vec::new();
     let mut updates_in_batch = 0usize;
