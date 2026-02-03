@@ -20,6 +20,8 @@ pub struct SyncConfig {
     pub neo4j_uri: String,
     pub neo4j_user: String,
     pub neo4j_pass: String,
+    /// Starting offset when Neo4j has no data. If None, falls back to pruning offset.
+    pub starting_offset: Option<i64>,
 }
 
 /// Exponential backoff configuration
@@ -337,15 +339,20 @@ pub async fn run_resilient_sync(
                     offset
                 }
                 Ok(None) => {
-                    // No data in Neo4j, query ledger for pruning offset
-                    match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
-                        Ok(pruning_offset) => {
-                            info!("No existing data in Neo4j, starting from ledger pruning offset: {}", pruning_offset);
-                            pruning_offset
-                        }
-                        Err(e) => {
-                            error!("Failed to get pruning offset from ledger: {}. Starting from 0", e);
-                            0
+                    // No data in Neo4j, use configured starting_offset or fall back to pruning offset
+                    if let Some(configured_offset) = sync_config.starting_offset {
+                        info!("No existing data in Neo4j, starting from configured starting_offset: {}", configured_offset);
+                        configured_offset
+                    } else {
+                        match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
+                            Ok(pruning_offset) => {
+                                info!("No existing data in Neo4j, starting from ledger pruning offset: {}", pruning_offset);
+                                pruning_offset
+                            }
+                            Err(e) => {
+                                error!("Failed to get pruning offset from ledger: {}. Starting from 0", e);
+                                0
+                            }
                         }
                     }
                 }

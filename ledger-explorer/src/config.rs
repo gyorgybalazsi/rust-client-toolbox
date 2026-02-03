@@ -60,6 +60,9 @@ pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
+    /// Starting offset for sync when Neo4j has no data.
+    /// If not specified, falls back to ledger pruning offset.
+    pub starting_offset: Option<i64>,
 }
 
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {

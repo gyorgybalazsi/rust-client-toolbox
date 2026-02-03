@@ -232,6 +232,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
+            let starting_offset = config.ledger.starting_offset;
             let neo4j_uri = config.neo4j.uri.clone();
             let neo4j_user = config.neo4j.user.clone();
             let neo4j_pass = config.neo4j.password.clone();
@@ -241,6 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ledger_url = %ledger_url,
                 neo4j_uri = %neo4j_uri,
                 parties = ?parties,
+                starting_offset = ?starting_offset,
                 "Configuration loaded"
             );
 
@@ -283,6 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 neo4j_uri,
                 neo4j_user,
                 neo4j_pass,
+                starting_offset,
             };
 
             if fresh {
