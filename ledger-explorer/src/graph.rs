@@ -1,7 +1,7 @@
 use futures_util::Stream;
 use tracing::{debug, info, warn};
 use neo4rs::{Graph, query};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio_stream::StreamExt;
 use anyhow::Result;
 
@@ -37,10 +37,13 @@ pub async fn apply_cypher_vec_stream_to_neo4j<S>(
     user: &str,
     pass: &str,
     mut query_stream: S,
+    batch_size: usize,
+    flush_timeout_secs: u64,
 ) -> Result<(Option<i64>, Option<i64>, u128), Box<dyn std::error::Error>>
 where
     S: Stream<Item = Vec<CypherQuery>> + Unpin,
 {
+    let flush_timeout = Duration::from_secs(flush_timeout_secs);
     info!("Connecting to Neo4j at {}", uri);
     let graph = Graph::new(uri, user, pass)?;
     debug!(uri = %uri, user = %user, "Successfully connected to Neo4j");
@@ -59,41 +62,81 @@ where
 
     // Measure update time
     let start_time = Instant::now();
-    info!("Starting to process query stream");
+    info!("Starting to process query stream (batch_size={}, flush_timeout={}s)", batch_size, flush_timeout_secs);
 
     // Batch multiple updates together for better Neo4j throughput
-    const BATCH_SIZE: usize = 100; // Commit every 100 updates for better throughput
     let mut batch_count = 0u64;
     let mut pending_queries: Vec<neo4rs::Query> = Vec::new();
     let mut updates_in_batch = 0usize;
+    let mut batch_start_time: Option<Instant> = None;
 
-    while let Some(cypher_vec) = query_stream.next().await {
-        batch_count += 1;
-        let query_count = cypher_vec.len();
-        debug!(batch = batch_count, query_count = query_count, "Received update");
+    loop {
+        // Calculate remaining time until flush timeout
+        let timeout_remaining = batch_start_time
+            .map(|start| flush_timeout.saturating_sub(start.elapsed()))
+            .unwrap_or(flush_timeout);
 
-        // Accumulate queries
-        let query_count_this_update = cypher_vec.len();
-        pending_queries.extend(cypher_vec.into_iter().map(|cq| cq.query));
-        updates_in_batch += 1;
+        // Wait for next update with timeout
+        let next_update = tokio::time::timeout(timeout_remaining, query_stream.next()).await;
 
-        if updates_in_batch == 1 {
-            info!("First update received, {} queries", query_count_this_update);
-        }
+        match next_update {
+            Ok(Some(cypher_vec)) => {
+                // Received an update
+                batch_count += 1;
+                let query_count = cypher_vec.len();
+                debug!(batch = batch_count, query_count = query_count, "Received update");
 
-        // Commit when batch is full
-        if updates_in_batch >= BATCH_SIZE {
-            let total_queries = pending_queries.len();
-            info!("Starting batch commit: {} updates, {} queries", updates_in_batch, total_queries);
-            let commit_start = Instant::now();
-            let mut txn = graph.start_txn().await?;
-            txn.run_queries(pending_queries).await?;
-            txn.commit().await?;
-            let commit_time = commit_start.elapsed();
-            info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
-                  BATCH_SIZE, total_queries, commit_time, batch_count);
-            pending_queries = Vec::new();
-            updates_in_batch = 0;
+                // Accumulate queries
+                let query_count_this_update = cypher_vec.len();
+                pending_queries.extend(cypher_vec.into_iter().map(|cq| cq.query));
+                updates_in_batch += 1;
+
+                // Start batch timer on first update
+                if batch_start_time.is_none() {
+                    batch_start_time = Some(Instant::now());
+                }
+
+                if updates_in_batch == 1 {
+                    info!("First update received, {} queries", query_count_this_update);
+                }
+
+                // Commit when batch is full
+                if updates_in_batch >= batch_size {
+                    let total_queries = pending_queries.len();
+                    info!("Starting batch commit (full): {} updates, {} queries", updates_in_batch, total_queries);
+                    let commit_start = Instant::now();
+                    let mut txn = graph.start_txn().await?;
+                    txn.run_queries(pending_queries).await?;
+                    txn.commit().await?;
+                    let commit_time = commit_start.elapsed();
+                    info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
+                          updates_in_batch, total_queries, commit_time, batch_count);
+                    pending_queries = Vec::new();
+                    updates_in_batch = 0;
+                    batch_start_time = None;
+                }
+            }
+            Ok(None) => {
+                // Stream ended
+                break;
+            }
+            Err(_) => {
+                // Timeout - flush partial batch if any
+                if !pending_queries.is_empty() {
+                    let total_queries = pending_queries.len();
+                    info!("Starting batch commit (timeout): {} updates, {} queries", updates_in_batch, total_queries);
+                    let commit_start = Instant::now();
+                    let mut txn = graph.start_txn().await?;
+                    txn.run_queries(pending_queries).await?;
+                    txn.commit().await?;
+                    let commit_time = commit_start.elapsed();
+                    info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
+                          updates_in_batch, total_queries, commit_time, batch_count);
+                    pending_queries = Vec::new();
+                    updates_in_batch = 0;
+                    batch_start_time = None;
+                }
+            }
         }
     }
 

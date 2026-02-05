@@ -286,6 +286,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 neo4j_user,
                 neo4j_pass,
                 starting_offset,
+                batch_size: config.neo4j.batch_size,
+                flush_timeout_secs: config.neo4j.flush_timeout_secs,
             };
 
             if fresh {

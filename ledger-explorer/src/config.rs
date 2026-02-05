@@ -53,6 +53,10 @@ pub struct Neo4jConfig {
     pub uri: String,
     pub user: String,
     pub password: String,
+    /// Number of updates to batch before committing to Neo4j
+    pub batch_size: usize,
+    /// Flush timeout in seconds - commit even if batch isn't full after this duration
+    pub flush_timeout_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]

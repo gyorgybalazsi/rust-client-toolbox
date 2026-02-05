@@ -22,6 +22,10 @@ pub struct SyncConfig {
     pub neo4j_pass: String,
     /// Starting offset when Neo4j has no data. If None, falls back to pruning offset.
     pub starting_offset: Option<i64>,
+    /// Number of updates to batch before committing to Neo4j
+    pub batch_size: usize,
+    /// Flush timeout in seconds - commit even if batch isn't full after this duration
+    pub flush_timeout_secs: u64,
 }
 
 /// Exponential backoff configuration
@@ -503,6 +507,8 @@ pub async fn run_resilient_sync(
             &sync_config.neo4j_user,
             &sync_config.neo4j_pass,
             cypher_stream,
+            sync_config.batch_size,
+            sync_config.flush_timeout_secs,
         ).await {
             Ok((before, after, time)) => {
                 info!(
