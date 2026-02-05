@@ -1,3 +1,6 @@
+# Active profile (can be overridden with --profile or -p flag)
+active_profile = "local"
+
 [logging]
 level = "info"
 
@@ -5,38 +8,81 @@ level = "info"
 uri = "neo4j://127.0.0.1:7687"
 user = "neo4j"
 password = "password"
+# Number of updates to batch before committing to Neo4j (default: 100)
+batch_size = 100
+# Flush timeout in seconds - commit even if batch isn't full (default: 1)
+flush_timeout_secs = 1
 
-[ledger]
+# ============================================================================
+# LOCAL PROFILE - For local development with Canton sandbox
+# ============================================================================
+[profiles.local.ledger]
 # User ID for generating fake JWT tokens (used when --use-keycloak is not specified)
 fake_jwt_user = "alice"
 # Party IDs to subscribe to for updates
 parties = ["Alice::1220..."]
 # Ledger API URL
 url = "http://localhost:6865"
-# Starting offset for streaming updates (default: 0)
-# Set this to the pruned offset if the ledger has been pruned
-begin_offset = 0
+# Starting offset for sync when Neo4j has no data (optional)
+# If not specified, falls back to ledger pruning offset
+# starting_offset = 0
+
+# Local profile typically doesn't need Keycloak
+# [profiles.local.keycloak]
 
 # ============================================================================
-# Optional: Keycloak configuration for obtaining real JWT tokens
-# Uncomment ONE of the sections below and configure to use --use-keycloak flag
+# DEVNET PROFILE - Example for a development network
 # ============================================================================
+[profiles.devnet.ledger]
+fake_jwt_user = "service-account"
+parties = [
+    "party1::1220abc...",
+    "party2::1220def..."
+]
+url = "https://devnet.example.com:5001"
+# starting_offset = 12345
 
-# ----------------------------------------------------------------------------
+# Client Credentials Flow (for service accounts)
+[profiles.devnet.keycloak]
+client_id = "your-service-account-client-id"
+token_endpoint = "https://keycloak.devnet.example.com/auth/realms/your-realm/protocol/openid-connect/token"
+grant_type = "client_credentials"
+client_secret = "your-client-secret"
+
+# ============================================================================
+# MAINNET PROFILE - Example for production network
+# ============================================================================
+[profiles.mainnet.ledger]
+fake_jwt_user = "unused"
+parties = [
+    "production-party::1220..."
+]
+url = "https://mainnet.example.com:5001"
+starting_offset = 1000000
+
+[profiles.mainnet.keycloak]
+client_id = "production-reader"
+token_endpoint = "https://keycloak.mainnet.example.com/auth/realms/production/protocol/openid-connect/token"
+grant_type = "client_credentials"
+client_secret = "production-secret"
+
+# ============================================================================
+# Keycloak Authentication Options
+# ============================================================================
+#
 # OPTION 1: Client Credentials Flow (for service accounts / machine-to-machine)
 # Use this when you have a service account with client_id and client_secret
-# ----------------------------------------------------------------------------
-# [keycloak]
+#
+# [profiles.myprofile.keycloak]
 # client_id = "your-service-account-client-id"
 # token_endpoint = "https://keycloak.example.com/auth/realms/your-realm/protocol/openid-connect/token"
 # grant_type = "client_credentials"
 # client_secret = "your-client-secret"
-
-# ----------------------------------------------------------------------------
+#
 # OPTION 2: Password Flow (for user authentication)
 # Use this when authenticating as a specific user with username/password
-# ----------------------------------------------------------------------------
-# [keycloak]
+#
+# [profiles.myprofile.keycloak]
 # client_id = "your-client-id"
 # token_endpoint = "https://keycloak.example.com/auth/realms/your-realm/protocol/openid-connect/token"
 # grant_type = "password"

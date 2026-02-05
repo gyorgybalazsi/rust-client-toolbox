@@ -36,6 +36,9 @@ enum Commands {
         /// Path to config.toml file
         #[arg(long)]
         config_file: Option<String>,
+        /// Profile to use (overrides active_profile in config)
+        #[arg(long, short)]
+        profile: Option<String>,
         /// Use Keycloak to obtain a real JWT token
         #[arg(long)]
         use_keycloak: bool,
@@ -50,10 +53,13 @@ enum Commands {
         /// Path to config.toml file (defaults to ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml)
         #[arg(long)]
         config_file: Option<String>,
+        /// Profile to use (overrides active_profile in config)
+        #[arg(long, short)]
+        profile: Option<String>,
         /// Optional access token (if not provided, will try Keycloak config, then fall back to fake JWT)
         #[arg(long)]
         access_token: Option<String>,
-        /// Use Keycloak to obtain a real JWT token (requires [keycloak] section in config)
+        /// Use Keycloak to obtain a real JWT token (requires keycloak section in profile)
         #[arg(long)]
         use_keycloak: bool,
         /// Fresh start: clear Neo4j database, load current ACS, and stream from ledger end
@@ -68,10 +74,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Determine log level from config file if available (for Sync command), otherwise default to INFO
     let log_level = match &cli.command {
-        Commands::Sync { config_file, .. } => {
+        Commands::Sync { config_file, profile, .. } => {
             let config = match config_file {
-                Some(path) => ledger_explorer::config::read_config(path).ok(),
-                None => ledger_explorer::config::read_config_from_toml().ok(),
+                Some(path) => ledger_explorer::config::read_config(path, profile.as_deref()).ok(),
+                None => ledger_explorer::config::read_config_from_toml(profile.as_deref()).ok(),
             };
             config.map(|c| c.logging.level).unwrap_or_else(|| "info".to_string())
         }
@@ -96,19 +102,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("End transaction");
             }
         }
-        Commands::Benchmark { config_file, use_keycloak, count, begin_offset } => {
+        Commands::Benchmark { config_file, profile, use_keycloak, count, begin_offset } => {
             info!("Starting Canton stream benchmark (no Neo4j writes)");
 
             let config = match config_file {
-                Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config"),
-                None => ledger_explorer::config::read_config_from_toml().expect("failed to read config"),
+                Some(path) => ledger_explorer::config::read_config(&path, profile.as_deref()).expect("failed to read config"),
+                None => ledger_explorer::config::read_config_from_toml(profile.as_deref()).expect("failed to read config"),
             };
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
 
             // Get token
             let token = if use_keycloak {
-                let kc_config = config.keycloak.expect("--use-keycloak requires [keycloak] section");
+                let kc_config = config.keycloak.expect("--use-keycloak requires keycloak section in profile");
                 let auth_method = match kc_config.auth_method {
                     config::KeycloakAuthMethod::ClientCredentials { client_secret } => {
                         client::jwt::KeycloakAuthMethod::ClientCredentials { client_secret }
@@ -221,13 +227,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("  Cypher overhead: {:.1}%", (1.0 - cypher_rate / raw_rate) * 100.0);
             info!("  (Compare with ledger-explorer sync rate to see Neo4j write overhead)");
         }
-        Commands::Sync { config_file, access_token, use_keycloak, fresh } => {
+        Commands::Sync { config_file, profile, access_token, use_keycloak, fresh } => {
             info!("Starting resilient sync command (fresh={})", fresh);
 
-            debug!(config_path = ?config_file, "Reading configuration from TOML file");
+            debug!(config_path = ?config_file, profile = ?profile, "Reading configuration from TOML file");
             let config = match config_file {
-                Some(path) => ledger_explorer::config::read_config(&path).expect("failed to read config from specified path"),
-                None => ledger_explorer::config::read_config_from_toml().expect("failed to read config from toml"),
+                Some(path) => ledger_explorer::config::read_config(&path, profile.as_deref()).expect("failed to read config from specified path"),
+                None => ledger_explorer::config::read_config_from_toml(profile.as_deref()).expect("failed to read config from toml"),
             };
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let parties = config.ledger.parties.unwrap_or_default();
@@ -254,7 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 None if use_keycloak => {
                     let kc_config = keycloak_config
-                        .expect("--use-keycloak requires [keycloak] section in config file");
+                        .expect("--use-keycloak requires keycloak section in profile");
                     info!("Using Keycloak for JWT token management at {}", kc_config.token_endpoint);
 
                     // Convert from ledger-explorer's KeycloakConfig to client's KeycloakConfig
