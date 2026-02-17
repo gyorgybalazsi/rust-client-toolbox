@@ -39,6 +39,7 @@ pub async fn apply_cypher_vec_stream_to_neo4j<S>(
     mut query_stream: S,
     batch_size: usize,
     flush_timeout_secs: u64,
+    idle_timeout_secs: u64,
 ) -> Result<(Option<i64>, Option<i64>, u128), Box<dyn std::error::Error>>
 where
     S: Stream<Item = Vec<CypherQuery>> + Unpin,
@@ -65,10 +66,12 @@ where
     info!("Starting to process query stream (batch_size={}, flush_timeout={}s)", batch_size, flush_timeout_secs);
 
     // Batch multiple updates together for better Neo4j throughput
+    let idle_timeout = Duration::from_secs(idle_timeout_secs);
     let mut batch_count = 0u64;
     let mut pending_queries: Vec<neo4rs::Query> = Vec::new();
     let mut updates_in_batch = 0usize;
     let mut batch_start_time: Option<Instant> = None;
+    let mut last_update_time = Instant::now();
 
     loop {
         // Calculate remaining time until flush timeout
@@ -81,6 +84,7 @@ where
 
         match next_update {
             Ok(Some(cypher_vec)) => {
+                last_update_time = Instant::now();
                 // Received an update
                 batch_count += 1;
                 let query_count = cypher_vec.len();
@@ -121,6 +125,24 @@ where
                 break;
             }
             Err(_) => {
+                // Check for idle timeout (stale/dead stream detection)
+                if last_update_time.elapsed() >= idle_timeout {
+                    warn!(
+                        "No updates received for {}s (idle_timeout={}s), stream appears stale. Triggering reconnect.",
+                        last_update_time.elapsed().as_secs(),
+                        idle_timeout_secs,
+                    );
+                    // Flush any pending queries before returning
+                    if !pending_queries.is_empty() {
+                        let queries_to_flush: Vec<neo4rs::Query> = pending_queries.drain(..).collect();
+                        let mut txn = graph.start_txn().await?;
+                        txn.run_queries(queries_to_flush).await?;
+                        txn.commit().await?;
+                        info!("Flushed {} pending queries before idle disconnect", updates_in_batch);
+                    }
+                    break;
+                }
+
                 // Timeout - flush partial batch if any
                 if !pending_queries.is_empty() {
                     let total_queries = pending_queries.len();

@@ -78,6 +78,11 @@ pub struct Neo4jConfig {
     /// Flush timeout in seconds - commit even if batch isn't full after this duration
     #[serde(default = "default_flush_timeout")]
     pub flush_timeout_secs: u64,
+    /// Idle timeout in seconds - reconnect if no updates received for this duration
+    /// Detects dead/stale gRPC streams. Canton sends periodic OffsetCheckpoints,
+    /// so a live stream is never silent for long.
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
 }
 
 fn default_batch_size() -> usize {
@@ -86,6 +91,10 @@ fn default_batch_size() -> usize {
 
 fn default_flush_timeout() -> u64 {
     1
+}
+
+fn default_idle_timeout() -> u64 {
+    60
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -26,6 +26,8 @@ pub struct SyncConfig {
     pub batch_size: usize,
     /// Flush timeout in seconds - commit even if batch isn't full after this duration
     pub flush_timeout_secs: u64,
+    /// Idle timeout in seconds - reconnect if no updates received for this duration
+    pub idle_timeout_secs: u64,
 }
 
 /// Exponential backoff configuration
@@ -509,6 +511,7 @@ pub async fn run_resilient_sync(
             cypher_stream,
             sync_config.batch_size,
             sync_config.flush_timeout_secs,
+            sync_config.idle_timeout_secs,
         ).await {
             Ok((before, after, time)) => {
                 info!(
