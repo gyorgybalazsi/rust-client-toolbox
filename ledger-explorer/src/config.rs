@@ -86,7 +86,7 @@ pub struct Neo4jConfig {
 }
 
 fn default_batch_size() -> usize {
-    100
+    500
 }
 
 fn default_flush_timeout() -> u64 {

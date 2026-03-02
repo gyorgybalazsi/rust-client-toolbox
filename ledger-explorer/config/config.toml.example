@@ -8,8 +8,8 @@ level = "info"
 uri = "neo4j://127.0.0.1:7687"
 user = "neo4j"
 password = "password"
-# Number of updates to batch before committing to Neo4j (default: 100)
-batch_size = 100
+# Number of updates to batch before committing to Neo4j (default: 500)
+batch_size = 500
 # Flush timeout in seconds - commit even if batch isn't full (default: 1)
 flush_timeout_secs = 1
 # Idle timeout in seconds - reconnect if no updates received for this duration (default: 60)

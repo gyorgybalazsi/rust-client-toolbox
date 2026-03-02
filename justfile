@@ -1,10 +1,10 @@
 # Run ledger-explorer with Keycloak authentication (release mode for performance)
 run-ledger-explorer:
-    cargo run --release -p ledger-explorer -- sync --use-keycloak
+    cargo run --release -p ledger-explorer -- sync --use-keycloak 2>&1 | tee sync.log
 
 # Fresh start: clear Neo4j, load current ACS, and stream from ledger end
 fresh-start:
-    cargo run --release -p ledger-explorer -- sync --use-keycloak --fresh
+    cargo run --release -p ledger-explorer -- sync --use-keycloak --fresh 2>&1 | tee sync.log
 
 # Stop ledger-explorer
 stop-ledger-explorer:

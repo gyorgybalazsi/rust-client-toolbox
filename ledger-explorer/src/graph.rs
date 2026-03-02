@@ -1,5 +1,5 @@
 use futures_util::Stream;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, warn, error};
 use neo4rs::{Graph, query};
 use std::time::{Duration, Instant};
 use tokio_stream::StreamExt;
@@ -7,14 +7,52 @@ use anyhow::Result;
 
 pub use crate::cypher::CypherQuery;
 
+const MAX_COMMIT_RETRIES: u32 = 3;
+const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Commits a batch of queries to Neo4j with retry logic for transient errors (e.g., deadlocks).
+async fn commit_with_retry(graph: &Graph, queries: Vec<neo4rs::Query>) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let mut delay = INITIAL_RETRY_DELAY;
+    for attempt in 1..=MAX_COMMIT_RETRIES {
+        let mut txn = graph.start_txn().await?;
+        match txn.run_queries(queries.clone()).await {
+            Ok(_) => match txn.commit().await {
+                Ok(_) => return Ok(()),
+                Err(e) if is_transient_error(&e) && attempt < MAX_COMMIT_RETRIES => {
+                    warn!("Transient Neo4j error on commit (attempt {}/{}): {}. Retrying in {:?}", attempt, MAX_COMMIT_RETRIES, e, delay);
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                }
+                Err(e) => return Err(Box::new(e)),
+            },
+            Err(e) if is_transient_error(&e) && attempt < MAX_COMMIT_RETRIES => {
+                warn!("Transient Neo4j error on run_queries (attempt {}/{}): {}. Retrying in {:?}", attempt, MAX_COMMIT_RETRIES, e, delay);
+                // Transaction is already failed, just retry
+                tokio::time::sleep(delay).await;
+                delay *= 2;
+            }
+            Err(e) => return Err(Box::new(e)),
+        }
+    }
+    error!("Exhausted all {} retries for Neo4j commit", MAX_COMMIT_RETRIES);
+    Err("Exhausted all retries for Neo4j commit".into())
+}
+
+/// Checks if a Neo4j error is transient and worth retrying.
+fn is_transient_error(e: &neo4rs::Error) -> bool {
+    let msg = format!("{}", e);
+    msg.contains("DeadlockDetected")
+        || msg.contains("TransientError")
+}
+
 /// Queries Neo4j for the maximum offset stored in the graph.
 /// This is used to determine where to resume processing after a restart.
 pub async fn get_last_processed_offset(uri: &str, user: &str, pass: &str) -> Result<Option<i64>> {
     debug!("Connecting to Neo4j at {} to query last offset", uri);
     let graph = Graph::new(uri, user, pass)?;
 
-    // Exclude ACS contracts (offset = -1) from the max offset calculation
-    let mut result = graph.execute(query("MATCH (n) WHERE n.offset IS NOT NULL AND n.offset >= 0 RETURN max(n.offset) as max_offset")).await?;
+    // Use Transaction label to leverage the transaction_offset index (fast)
+    let mut result = graph.execute(query("MATCH (t:Transaction) RETURN max(t.offset) as max_offset")).await?;
     match result.next().await {
         Ok(Some(row)) => {
             let offset = row.get::<Option<i64>>("max_offset")?;
@@ -52,7 +90,7 @@ where
     // Query max offset before update
     debug!("Querying max offset before update");
     let before_offset = {
-        let mut result = graph.execute(query("MATCH (n) RETURN max(n.offset) as max_offset")).await?;
+        let mut result = graph.execute(query("MATCH (t:Transaction) RETURN max(t.offset) as max_offset")).await?;
         match result.next().await {
             Ok(Some(row)) => row.get::<Option<i64>>("max_offset")?,
             Ok(None) => None,
@@ -109,9 +147,7 @@ where
                     let total_queries = pending_queries.len();
                     info!("Starting batch commit (full): {} updates, {} queries", updates_in_batch, total_queries);
                     let commit_start = Instant::now();
-                    let mut txn = graph.start_txn().await?;
-                    txn.run_queries(pending_queries).await?;
-                    txn.commit().await?;
+                    commit_with_retry(&graph, pending_queries).await?;
                     let commit_time = commit_start.elapsed();
                     info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
                           updates_in_batch, total_queries, commit_time, batch_count);
@@ -135,9 +171,7 @@ where
                     // Flush any pending queries before returning
                     if !pending_queries.is_empty() {
                         let queries_to_flush: Vec<neo4rs::Query> = pending_queries.drain(..).collect();
-                        let mut txn = graph.start_txn().await?;
-                        txn.run_queries(queries_to_flush).await?;
-                        txn.commit().await?;
+                        commit_with_retry(&graph, queries_to_flush).await?;
                         info!("Flushed {} pending queries before idle disconnect", updates_in_batch);
                     }
                     break;
@@ -148,9 +182,7 @@ where
                     let total_queries = pending_queries.len();
                     info!("Starting batch commit (timeout): {} updates, {} queries", updates_in_batch, total_queries);
                     let commit_start = Instant::now();
-                    let mut txn = graph.start_txn().await?;
-                    txn.run_queries(pending_queries).await?;
-                    txn.commit().await?;
+                    commit_with_retry(&graph, pending_queries).await?;
                     let commit_time = commit_start.elapsed();
                     info!("Committed batch of {} updates ({} queries) in {:?} ({} total updates)",
                           updates_in_batch, total_queries, commit_time, batch_count);
@@ -165,9 +197,7 @@ where
     // Commit any remaining queries
     if !pending_queries.is_empty() {
         debug!(updates = updates_in_batch, queries = pending_queries.len(), "Committing final batch");
-        let mut txn = graph.start_txn().await?;
-        txn.run_queries(pending_queries).await?;
-        txn.commit().await?;
+        commit_with_retry(&graph, pending_queries).await?;
         info!("Committed final batch of {} updates", updates_in_batch);
     }
 
@@ -177,7 +207,7 @@ where
     // Query max offset after update
     debug!("Querying max offset after update");
     let after_offset = {
-        let mut result = graph.execute(query("MATCH (n) RETURN max(n.offset) as max_offset")).await?;
+        let mut result = graph.execute(query("MATCH (t:Transaction) RETURN max(t.offset) as max_offset")).await?;
         match result.next().await {
             Ok(Some(row)) => row.get::<Option<i64>>("max_offset")?,
             Ok(None) => None,
