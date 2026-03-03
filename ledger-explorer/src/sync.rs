@@ -316,21 +316,48 @@ pub async fn run_resilient_sync(
 
         // First, determine the starting offset
         let begin_offset = if fresh && fresh_start_offset.is_none() {
-            // Fresh start: use current ledger end
-            match get_ledger_end(&sync_config.ledger_url, Some(&token)).await {
-                Ok(ledger_end) => {
-                    info!("FRESH START: Using current ledger end as starting point: {}", ledger_end);
-                    fresh_start_offset = Some(ledger_end);
-                    ledger_end
+            // Fresh start: use starting_offset if configured, otherwise ledger end
+            match sync_config.starting_offset {
+                Some(configured_offset) => {
+                    match get_ledger_end(&sync_config.ledger_url, Some(&token)).await {
+                        Ok(ledger_end) => {
+                            let resolved = if configured_offset < 0 {
+                                (ledger_end + configured_offset).max(0)
+                            } else {
+                                configured_offset
+                            };
+                            info!("FRESH START: Using starting_offset {} (resolved to {}, ledger_end={})", configured_offset, resolved, ledger_end);
+                            fresh_start_offset = Some(resolved);
+                            resolved
+                        }
+                        Err(e) => {
+                            error!("Failed to get ledger end: {}. Retrying in {:?}", e, current_delay);
+                            tokio::time::sleep(current_delay).await;
+                            current_delay = std::cmp::min(
+                                Duration::from_secs_f64(current_delay.as_secs_f64() * backoff_config.multiplier),
+                                backoff_config.max_delay,
+                            );
+                            continue;
+                        }
+                    }
                 }
-                Err(e) => {
-                    error!("Failed to get ledger end: {}. Retrying in {:?}", e, current_delay);
-                    tokio::time::sleep(current_delay).await;
-                    current_delay = std::cmp::min(
-                        Duration::from_secs_f64(current_delay.as_secs_f64() * backoff_config.multiplier),
-                        backoff_config.max_delay,
-                    );
-                    continue;
+                None => {
+                    match get_ledger_end(&sync_config.ledger_url, Some(&token)).await {
+                        Ok(ledger_end) => {
+                            info!("FRESH START: No starting_offset configured, using current ledger end: {}", ledger_end);
+                            fresh_start_offset = Some(ledger_end);
+                            ledger_end
+                        }
+                        Err(e) => {
+                            error!("Failed to get ledger end: {}. Retrying in {:?}", e, current_delay);
+                            tokio::time::sleep(current_delay).await;
+                            current_delay = std::cmp::min(
+                                Duration::from_secs_f64(current_delay.as_secs_f64() * backoff_config.multiplier),
+                                backoff_config.max_delay,
+                            );
+                            continue;
+                        }
+                    }
                 }
             }
         } else if let Some(offset) = fresh_start_offset {
@@ -349,9 +376,24 @@ pub async fn run_resilient_sync(
                 }
                 Ok(None) => {
                     // No data in Neo4j, use configured starting_offset or fall back to pruning offset
+                    // Negative starting_offset means relative to ledger end (e.g., -5000000 = 5M before end)
                     if let Some(configured_offset) = sync_config.starting_offset {
-                        info!("No existing data in Neo4j, starting from configured starting_offset: {}", configured_offset);
-                        configured_offset
+                        if configured_offset < 0 {
+                            match get_ledger_end(&sync_config.ledger_url, Some(&token)).await {
+                                Ok(ledger_end) => {
+                                    let resolved = (ledger_end + configured_offset).max(0);
+                                    info!("No existing data in Neo4j, starting from ledger_end ({}) {} = {}", ledger_end, configured_offset, resolved);
+                                    resolved
+                                }
+                                Err(e) => {
+                                    error!("Failed to get ledger end for relative offset: {}. Using offset 0", e);
+                                    0
+                                }
+                            }
+                        } else {
+                            info!("No existing data in Neo4j, starting from configured starting_offset: {}", configured_offset);
+                            configured_offset
+                        }
                     } else {
                         match get_pruning_offset(&sync_config.ledger_url, Some(&token)).await {
                             Ok(pruning_offset) => {

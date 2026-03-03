@@ -27,8 +27,9 @@ parties = ["Alice::1220..."]
 # Ledger API URL
 url = "http://localhost:6865"
 # Starting offset for sync when Neo4j has no data (optional)
+# Positive value: absolute offset. Negative value: relative to ledger end (e.g., -5000000)
 # If not specified, falls back to ledger pruning offset
-# starting_offset = 0
+# starting_offset = -5000000
 
 # Local profile typically doesn't need Keycloak
 # [profiles.local.keycloak]

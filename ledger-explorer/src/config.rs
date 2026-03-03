@@ -103,6 +103,7 @@ pub struct LedgerConfig {
     pub parties: Option<Vec<String>>,
     pub url: String,
     /// Starting offset for sync when Neo4j has no data.
+    /// Positive value: absolute offset. Negative value: relative to ledger end (e.g., -5000000).
     /// If not specified, falls back to ledger pruning offset.
     pub starting_offset: Option<i64>,
 }

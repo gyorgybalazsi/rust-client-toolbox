@@ -42,7 +42,8 @@ pub async fn stream_active_contracts(
     debug!("Connecting to state service at {}", url);
     let mut client = StateServiceClient::connect(url.clone())
         .await
-        .with_context(|| format!("Failed to connect to state service at {}", url))?;
+        .with_context(|| format!("Failed to connect to state service at {}", url))?
+        .max_decoding_message_size(64 * 1024 * 1024);
 
     let filters_by_party: HashMap<String, ledger_api::v2::Filters> = build_filters_by_party(&parties);
     debug!("Built filters_by_party: {:?}", filters_by_party);

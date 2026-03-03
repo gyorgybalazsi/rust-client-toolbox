@@ -27,7 +27,7 @@ pub async fn stream_updates(
     );
 
     debug!("Connecting to update service at {}:{}: {}", file!(), line!(), url);
-    let mut client = match UpdateServiceClient::connect(url.clone()).await {
+    let mut client = match UpdateServiceClient::connect(url.clone()).await.map(|c| c.max_decoding_message_size(64 * 1024 * 1024)) {
         Ok(c) => {
             debug!("Successfully connected to update service at {}:{}", file!(), line!());
             c
