@@ -61,6 +61,7 @@ async fn ensure_indexes(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> 
         "CREATE INDEX exercised_offset_node IF NOT EXISTS FOR (e:Exercised) ON (e.offset, e.node_id)",
         "CREATE INDEX exercised_choice_name IF NOT EXISTS FOR (e:Exercised) ON (e.choice_name)",
         "CREATE INDEX transaction_offset IF NOT EXISTS FOR (t:Transaction) ON (t.offset)",
+        "CREATE INDEX transaction_id_idx IF NOT EXISTS FOR (t:Transaction) ON (t.transaction_id)",
         "CREATE INDEX party_id IF NOT EXISTS FOR (p:Party) ON (p.party_id)",
     ];
 
