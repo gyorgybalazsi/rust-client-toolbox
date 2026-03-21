@@ -1,6 +1,6 @@
-// Generated types from codegen
-#[path = "../../../codegen/generated/nested_test_structs.rs"]
-pub mod generated;
+pub mod generated {
+    include!(concat!(env!("OUT_DIR"), "/nested_test_structs.rs"));
+}
 
 pub use generated::daml_nested_test::main::Registry;
 pub use generated::daml_nested_test::main::UpdatePerson;
