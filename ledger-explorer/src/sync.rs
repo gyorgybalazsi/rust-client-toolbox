@@ -32,6 +32,8 @@ pub struct SyncConfig {
     pub flatten_arguments: bool,
     /// Maximum recursion depth for flattening nested records
     pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as Neo4j properties
+    pub store_arguments_json: bool,
 }
 
 /// Exponential backoff configuration
@@ -220,6 +222,7 @@ pub async fn run_resilient_sync(
     let flatten_config = cypher::FlattenConfig {
         enabled: sync_config.flatten_arguments,
         max_depth: sync_config.flatten_max_depth,
+        store_arguments_json: sync_config.store_arguments_json,
     };
 
     let token_manager = Arc::new(TokenManager::new(token_source));

@@ -23,6 +23,8 @@ idle_timeout_secs = 60
 flatten_arguments = true
 # Maximum recursion depth for flattening nested records (default: 10)
 flatten_max_depth = 10
+# Store raw JSON blobs of arguments as create_arguments_json / choice_argument_json (default: false)
+store_arguments_json = false
 
 # ============================================================================
 # LOCAL PROFILE - For local development with Canton sandbox
@@ -31,7 +33,8 @@ flatten_max_depth = 10
 # User ID for generating fake JWT tokens (used when --use-keycloak is not specified)
 fake_jwt_user = "alice"
 # Party IDs to subscribe to for updates
-parties = ["Alice::1220..."]
+# If omitted or empty, parties are auto-discovered from the ledger via ListKnownParties
+# parties = ["Alice::1220..."]
 # Ledger API URL
 url = "http://localhost:6865"
 # Starting offset for sync when Neo4j has no data (optional)

@@ -10,17 +10,12 @@ use crate::api_record_to_json::{
     flatten_value_to_properties,
 };
 
-/// Configuration for argument flattening in Cypher generation
+/// Configuration for argument storage in Cypher generation
 #[derive(Debug, Clone, Copy)]
 pub struct FlattenConfig {
     pub enabled: bool,
     pub max_depth: usize,
-}
-
-impl FlattenConfig {
-    pub fn disabled() -> Self {
-        Self { enabled: false, max_depth: 0 }
-    }
+    pub store_arguments_json: bool,
 }
 
 /// Wrapper around neo4rs::Query that preserves the cypher string and params for debugging
@@ -195,17 +190,6 @@ pub fn get_updates_response_to_cypher(
                         dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
                     })
                     .unwrap_or_default();
-                let create_arguments_json = created
-                    .create_arguments
-                    .as_ref()
-                    .map(|args| api_record_to_json(args))
-                    .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
-                let create_arguments = created
-                    .create_arguments
-                    .as_ref()
-                    .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
                 let flattened_args: serde_json::Value = if flatten.enabled {
                     created
                         .create_arguments
@@ -219,7 +203,7 @@ pub fn get_updates_response_to_cypher(
                     json!({})
                 };
 
-                created_events.push(json!({
+                let mut event = json!({
                     "contract_id": created.contract_id,
                     "template_name": template_name,
                     "label": label,
@@ -227,10 +211,24 @@ pub fn get_updates_response_to_cypher(
                     "offset": created.offset,
                     "node_id": created.node_id,
                     "created_at": created_at,
-                    "create_arguments": create_arguments,
-                    "create_arguments_json": create_arguments_json,
                     "flattened_args": flattened_args
-                }));
+                });
+                if flatten.store_arguments_json {
+                    let create_arguments_json = created
+                        .create_arguments
+                        .as_ref()
+                        .map(|args| api_record_to_json(args))
+                        .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string());
+                    let create_arguments = created
+                        .create_arguments
+                        .as_ref()
+                        .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string());
+                    event["create_arguments"] = json!(create_arguments);
+                    event["create_arguments_json"] = json!(create_arguments_json);
+                }
+                created_events.push(event);
             }
             Some(Event::Exercised(exercised)) => {
                 let label = format!("{}@{}", exercised.choice, exercised.offset);
@@ -249,13 +247,6 @@ pub fn get_updates_response_to_cypher(
                         dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
                     })
                     .unwrap_or_default();
-                let choice_argument_json_val = choice_argument_json(&exercised.choice_argument);
-                let choice_argument_json = serde_json::to_string(&choice_argument_json_val).unwrap_or("null".to_string());
-                let choice_argument = exercised
-                    .choice_argument
-                    .as_ref()
-                    .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
                 let flattened_args: serde_json::Value = if flatten.enabled {
                     exercised
                         .choice_argument
@@ -269,7 +260,7 @@ pub fn get_updates_response_to_cypher(
                     json!({})
                 };
 
-                exercised_events.push(json!({
+                let mut event = json!({
                     "label": label,
                     "choice_name": choice_name,
                     "target_contract_id": exercised.contract_id,
@@ -280,10 +271,18 @@ pub fn get_updates_response_to_cypher(
                     "result_contract_ids": serde_json::to_string(&extract_contract_ids_from_value(&exercised.exercise_result)).unwrap_or("[]".to_string()),
                     "last_descendant_node_id": exercised.last_descendant_node_id,
                     "transaction_effective_at": transaction_effective_at,
-                    "choice_argument": choice_argument,
-                    "choice_argument_json": choice_argument_json,
                     "flattened_args": flattened_args
-                }));
+                });
+                if flatten.store_arguments_json {
+                    let choice_argument_json_val = choice_argument_json(&exercised.choice_argument);
+                    event["choice_argument"] = json!(exercised
+                        .choice_argument
+                        .as_ref()
+                        .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string()));
+                    event["choice_argument_json"] = json!(serde_json::to_string(&choice_argument_json_val).unwrap_or("null".to_string()));
+                }
+                exercised_events.push(event);
             }
             _ => {}
         }
@@ -291,7 +290,7 @@ pub fn get_updates_response_to_cypher(
 
     // Batch MERGE Created nodes (use contract_id as unique key to avoid duplicates)
     if !created_events.is_empty() {
-        let cypher = CypherQuery::new(
+        let mut created_cypher = String::from(
             "UNWIND $props AS p \
             MERGE (c:Created { contract_id: p.contract_id }) \
             ON CREATE SET \
@@ -300,17 +299,23 @@ pub fn get_updates_response_to_cypher(
             c.signatories = p.signatories, \
             c.offset = p.offset, \
             c.node_id = p.node_id, \
-            c.created_at = p.created_at, \
+            c.created_at = p.created_at"
+        );
+        if flatten.store_arguments_json {
+            created_cypher.push_str(", \
             c.create_arguments = p.create_arguments, \
-            c.create_arguments_json = p.create_arguments_json \
-            SET c += p.flattened_args".to_string()
-        ).with_json_param("props", serde_json::Value::Array(created_events));
+            c.create_arguments_json = p.create_arguments_json");
+        }
+        created_cypher.push_str(" \
+            SET c += p.flattened_args");
+        let cypher = CypherQuery::new(created_cypher)
+            .with_json_param("props", serde_json::Value::Array(created_events));
         cypher_statements.push(cypher);
     }
 
     // Batch MERGE Exercised nodes (use offset + node_id as unique key to avoid duplicates)
     if !exercised_events.is_empty() {
-        let cypher = CypherQuery::new(
+        let mut exercised_cypher = String::from(
             "UNWIND $props AS p \
             MERGE (e:Exercised { offset: p.offset, node_id: p.node_id }) \
             ON CREATE SET \
@@ -321,11 +326,17 @@ pub fn get_updates_response_to_cypher(
             e.consuming = p.consuming, \
             e.result_contract_ids = p.result_contract_ids, \
             e.last_descendant_node_id = p.last_descendant_node_id, \
-            e.transaction_effective_at = p.transaction_effective_at, \
+            e.transaction_effective_at = p.transaction_effective_at"
+        );
+        if flatten.store_arguments_json {
+            exercised_cypher.push_str(", \
             e.choice_argument = p.choice_argument, \
-            e.choice_argument_json = p.choice_argument_json \
-            SET e += p.flattened_args".to_string()
-        ).with_json_param("props", serde_json::Value::Array(exercised_events));
+            e.choice_argument_json = p.choice_argument_json");
+        }
+        exercised_cypher.push_str(" \
+            SET e += p.flattened_args");
+        let cypher = CypherQuery::new(exercised_cypher)
+            .with_json_param("props", serde_json::Value::Array(exercised_events));
         cypher_statements.push(cypher);
     }
 
@@ -535,17 +546,6 @@ pub fn created_event_to_cypher(created: &CreatedEvent, flatten: FlattenConfig) -
             dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
         })
         .unwrap_or_default();
-    let create_arguments_json = created
-        .create_arguments
-        .as_ref()
-        .map(|args| api_record_to_json(args))
-        .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
-        .unwrap_or("null".to_string());
-    let create_arguments = created
-        .create_arguments
-        .as_ref()
-        .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
-        .unwrap_or("null".to_string());
     let flattened_args: serde_json::Value = if flatten.enabled {
         created
             .create_arguments
@@ -561,7 +561,7 @@ pub fn created_event_to_cypher(created: &CreatedEvent, flatten: FlattenConfig) -
 
     // Use MERGE to avoid duplicates if contract already exists
     // SET c += $flattened_args runs on both CREATE and MATCH to backfill existing nodes
-    let query = CypherQuery::new(
+    let mut cypher_str = String::from(
         "MERGE (c:Created { contract_id: $contract_id }) \
         ON CREATE SET \
         c.template_name = $template_name, \
@@ -570,21 +570,42 @@ pub fn created_event_to_cypher(created: &CreatedEvent, flatten: FlattenConfig) -
         c.offset = $offset, \
         c.node_id = $node_id, \
         c.created_at = $created_at, \
+        c.from_acs = true"
+    );
+    if flatten.store_arguments_json {
+        cypher_str.push_str(", \
         c.create_arguments = $create_arguments, \
-        c.create_arguments_json = $create_arguments_json, \
-        c.from_acs = true \
-        SET c += $flattened_args".to_string()
-    )
-    .with_param("contract_id", created.contract_id.clone())
-    .with_param("template_name", template_name)
-    .with_param("label", label)
-    .with_param("signatories", signatories_str)
-    .with_param("offset", -1i64)
-    .with_param("node_id", 0i64)
-    .with_param("created_at", created_at)
-    .with_param("create_arguments", create_arguments)
-    .with_param("create_arguments_json", create_arguments_json)
-    .with_json_param("flattened_args", flattened_args);
+        c.create_arguments_json = $create_arguments_json");
+    }
+    cypher_str.push_str(" \
+        SET c += $flattened_args");
+
+    let mut query = CypherQuery::new(cypher_str)
+        .with_param("contract_id", created.contract_id.clone())
+        .with_param("template_name", template_name)
+        .with_param("label", label)
+        .with_param("signatories", signatories_str)
+        .with_param("offset", -1i64)
+        .with_param("node_id", 0i64)
+        .with_param("created_at", created_at)
+        .with_json_param("flattened_args", flattened_args);
+
+    if flatten.store_arguments_json {
+        let create_arguments = created
+            .create_arguments
+            .as_ref()
+            .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
+            .unwrap_or("null".to_string());
+        let create_arguments_json = created
+            .create_arguments
+            .as_ref()
+            .map(|args| api_record_to_json(args))
+            .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
+            .unwrap_or("null".to_string());
+        query = query
+            .with_param("create_arguments", create_arguments)
+            .with_param("create_arguments_json", create_arguments_json);
+    }
 
     cypher_statements.push(query);
     cypher_statements

@@ -27,6 +27,9 @@ pub struct StorageConfig {
     /// Maximum recursion depth for flattening nested records
     #[serde(default = "default_flatten_max_depth")]
     pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as create_arguments_json / choice_argument_json properties
+    #[serde(default)]
+    pub store_arguments_json: bool,
 }
 
 impl Default for StorageConfig {
@@ -34,6 +37,7 @@ impl Default for StorageConfig {
         Self {
             flatten_arguments: true,
             flatten_max_depth: 10,
+            store_arguments_json: false,
         }
     }
 }

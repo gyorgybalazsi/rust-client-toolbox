@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parties = vec![party];
             let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
             while let Some(response) = update_stream.next().await {
-                let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig { enabled: true, max_depth: 10 });
+                let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig { enabled: true, max_depth: 10, store_arguments_json: false });
                 println!("Start transaction");
                 println!("{:?}", cypher_queries);
                 println!("End transaction");
@@ -195,7 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(response) = update_stream.next().await {
                 match response {
                     Ok(resp) => {
-                        let queries = cypher::get_updates_response_to_cypher(&resp, cypher::FlattenConfig { enabled: true, max_depth: 10 });
+                        let queries = cypher::get_updates_response_to_cypher(&resp, cypher::FlattenConfig { enabled: true, max_depth: 10, store_arguments_json: false });
                         total_queries += queries.len();
                         cypher_count += 1;
                         if cypher_count >= count {
@@ -236,7 +236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => ledger_explorer::config::read_config_from_toml(profile.as_deref()).expect("failed to read config from toml"),
             };
             let fake_jwt_user = config.ledger.fake_jwt_user;
-            let parties = config.ledger.parties.unwrap_or_default();
+            let configured_parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
             let starting_offset = config.ledger.starting_offset;
             let neo4j_uri = config.neo4j.uri.clone();
@@ -247,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!(
                 ledger_url = %ledger_url,
                 neo4j_uri = %neo4j_uri,
-                parties = ?parties,
+                parties = ?configured_parties,
                 starting_offset = ?starting_offset,
                 "Configuration loaded"
             );
@@ -285,6 +285,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
+            // Auto-discover parties from ledger if none configured
+            let parties = if configured_parties.is_empty() {
+                info!("No parties configured, discovering from ledger...");
+                let tm = client::jwt::TokenManager::new(token_source.clone());
+                let discovery_token = tm.get_token().await?;
+                let discovered: Vec<String> = client::party_management::get_parties::get_parties(
+                    ledger_url.clone(),
+                    Some(&discovery_token),
+                    None,
+                ).await?
+                    .into_iter()
+                    .filter(|p| !p.starts_with("sandbox::"))
+                    .collect();
+                info!("Discovered {} parties: {:?}", discovered.len(), discovered);
+                discovered
+            } else {
+                configured_parties
+            };
+
             let sync_config = SyncConfig {
                 ledger_url,
                 parties,
@@ -297,6 +316,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 idle_timeout_secs: config.neo4j.idle_timeout_secs,
                 flatten_arguments: config.storage.flatten_arguments,
                 flatten_max_depth: config.storage.flatten_max_depth,
+                store_arguments_json: config.storage.store_arguments_json,
             };
 
             if fresh {
