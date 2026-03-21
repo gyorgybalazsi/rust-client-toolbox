@@ -37,6 +37,49 @@ pub fn archive_from_dar(dar_path: &str) -> Result<Archive> {
         .with_context(|| format!("Failed to decode Archive from '{}'", main_dalf))
 }
 
+pub struct RawDalf {
+    pub zip_entry_name: String,
+    pub bytes: Vec<u8>,
+}
+
+/// Extracts all DALF bytes from a DAR ZIP.
+/// Returns (main_dalf_path, all_dalfs).
+pub fn extract_dalfs_from_dar(dar_path: &str) -> Result<(String, Vec<RawDalf>)> {
+    let mut file = File::open(dar_path)
+        .with_context(|| format!("Failed to open DAR file '{}'", dar_path))?;
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf)
+        .with_context(|| format!("Failed to read DAR file '{}'", dar_path))?;
+
+    let mut zip = ZipArchive::new(Cursor::new(buf))
+        .with_context(|| format!("Failed to open zip archive '{}'", dar_path))?;
+
+    let main_dalf_path = {
+        let mut manifest = zip.by_name("META-INF/MANIFEST.MF")
+            .with_context(|| "Failed to find META-INF/MANIFEST.MF in archive")?;
+        let mut manifest_str = String::new();
+        manifest.read_to_string(&mut manifest_str)
+            .with_context(|| "Failed to read META-INF/MANIFEST.MF")?;
+        parse_manifest_main_dalf(&manifest_str)
+            .context("Main-Dalf not found in MANIFEST.MF")?
+    };
+
+    let mut dalfs = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i)
+            .with_context(|| format!("Failed to read ZIP entry at index {}", i))?;
+        if entry.name().ends_with(".dalf") {
+            let name = entry.name().to_string();
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes)
+                .with_context(|| format!("Failed to read DALF '{}'", name))?;
+            dalfs.push(RawDalf { zip_entry_name: name, bytes });
+        }
+    }
+
+    Ok((main_dalf_path, dalfs))
+}
+
 fn parse_manifest_main_dalf(manifest_str: &str) -> Option<String> {
     let mut key = String::new();
     let mut value = String::new();
