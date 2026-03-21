@@ -28,6 +28,10 @@ pub struct SyncConfig {
     pub flush_timeout_secs: u64,
     /// Idle timeout in seconds - reconnect if no updates received for this duration
     pub idle_timeout_secs: u64,
+    /// Flatten create/choice arguments into dot-separated Neo4j node properties
+    pub flatten_arguments: bool,
+    /// Maximum recursion depth for flattening nested records
+    pub flatten_max_depth: usize,
 }
 
 /// Exponential backoff configuration
@@ -89,6 +93,7 @@ async fn load_acs_to_neo4j(
     parties: &[String],
     token: &str,
     acs_offset: i64,
+    flatten_config: cypher::FlattenConfig,
 ) -> Result<()> {
     info!("Loading Active Contract Set (ACS) into Neo4j at offset {}...", acs_offset);
     let start_time = Instant::now();
@@ -111,7 +116,7 @@ async fn load_acs_to_neo4j(
     while let Some(contract_result) = acs_stream.next().await {
         match contract_result {
             Ok(contract) => {
-                let queries = cypher::created_event_to_cypher(&contract.created_event);
+                let queries = cypher::created_event_to_cypher(&contract.created_event, flatten_config);
                 batch_queries.extend(queries.into_iter().map(|cq| cq.query));
                 contract_count += 1;
 
@@ -211,6 +216,11 @@ pub async fn run_resilient_sync(
 
     // Ensure indexes exist before starting sync
     ensure_indexes(&sync_config.neo4j_uri, &sync_config.neo4j_user, &sync_config.neo4j_pass).await?;
+
+    let flatten_config = cypher::FlattenConfig {
+        enabled: sync_config.flatten_arguments,
+        max_depth: sync_config.flatten_max_depth,
+    };
 
     let token_manager = Arc::new(TokenManager::new(token_source));
 
@@ -445,6 +455,7 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        flatten_config,
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -471,6 +482,7 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        flatten_config,
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -543,7 +555,7 @@ pub async fn run_resilient_sync(
                     ledger_api::v2::get_updates_response::Update::TopologyTransaction(t) => t.offset,
                 });
                 debug!(offset = ?offset, "Processing update from stream");
-                cypher::get_updates_response_to_cypher(&response)
+                cypher::get_updates_response_to_cypher(&response, flatten_config)
             });
 
         // Apply to Neo4j - this will return when the stream ends or errors

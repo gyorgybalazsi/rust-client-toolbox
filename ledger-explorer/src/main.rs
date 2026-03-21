@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parties = vec![party];
             let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
             while let Some(response) = update_stream.next().await {
-                let cypher_queries = cypher::get_updates_response_to_cypher(&response?);
+                let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig { enabled: true, max_depth: 10 });
                 println!("Start transaction");
                 println!("{:?}", cypher_queries);
                 println!("End transaction");
@@ -195,7 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(response) = update_stream.next().await {
                 match response {
                     Ok(resp) => {
-                        let queries = cypher::get_updates_response_to_cypher(&resp);
+                        let queries = cypher::get_updates_response_to_cypher(&resp, cypher::FlattenConfig { enabled: true, max_depth: 10 });
                         total_queries += queries.len();
                         cypher_count += 1;
                         if cypher_count >= count {
@@ -295,6 +295,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 batch_size: config.neo4j.batch_size,
                 flush_timeout_secs: config.neo4j.flush_timeout_secs,
                 idle_timeout_secs: config.neo4j.idle_timeout_secs,
+                flatten_arguments: config.storage.flatten_arguments,
+                flatten_max_depth: config.storage.flatten_max_depth,
             };
 
             if fresh {

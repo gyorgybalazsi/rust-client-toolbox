@@ -16,6 +16,14 @@ flush_timeout_secs = 1
 # Canton sends periodic OffsetCheckpoints, so a live stream is never silent for long
 idle_timeout_secs = 60
 
+[storage]
+# Flatten create/choice arguments into dot-separated Neo4j node properties (default: true)
+# When enabled, nested record fields become directly queryable:
+#   MATCH (c:Created) WHERE c.`create_arg.person.homeAddress.city` = 'Zurich' RETURN c
+flatten_arguments = true
+# Maximum recursion depth for flattening nested records (default: 10)
+flatten_max_depth = 10
+
 # ============================================================================
 # LOCAL PROFILE - For local development with Canton sandbox
 # ============================================================================
