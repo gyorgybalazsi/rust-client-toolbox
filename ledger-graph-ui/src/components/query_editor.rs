@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 use std::collections::HashMap;
 
 #[component]
-pub fn QueryEditor(on_result: EventHandler<GraphData>) -> Element {
+pub fn QueryEditor(
+    on_result: EventHandler<GraphData>,
+    on_replay: EventHandler<GraphData>,
+) -> Element {
     let mut cypher = use_signal(|| {
         "MATCH (t:Transaction)-[r]->(e) RETURN t, r, e LIMIT 50".to_string()
     });
@@ -19,6 +22,23 @@ pub fn QueryEditor(on_result: EventHandler<GraphData>) -> Element {
             match run_cypher(query, HashMap::new()).await {
                 Ok(data) => {
                     on_result.call(data);
+                }
+                Err(e) => {
+                    error.set(Some(format!("{e}")));
+                }
+            }
+            loading.set(false);
+        });
+    };
+
+    let replay = move |_| {
+        let query = cypher.read().clone();
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            match run_cypher(query, HashMap::new()).await {
+                Ok(data) => {
+                    on_replay.call(data);
                 }
                 Err(e) => {
                     error.set(Some(format!("{e}")));
@@ -45,6 +65,12 @@ pub fn QueryEditor(on_result: EventHandler<GraphData>) -> Element {
                     disabled: is_loading,
                     onclick: execute,
                     if is_loading { "Running..." } else { "Execute" }
+                }
+                button {
+                    class: "replay-btn",
+                    disabled: is_loading,
+                    onclick: replay,
+                    "Replay"
                 }
             }
             if let Some(err) = error.read().as_ref() {
