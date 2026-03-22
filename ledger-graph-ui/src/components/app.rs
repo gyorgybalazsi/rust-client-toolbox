@@ -6,6 +6,8 @@ use crate::models::graph::GraphData;
 use crate::state::graph_state::{Selection, Viewport};
 use dioxus::prelude::*;
 
+const MAIN_CSS: Asset = asset!("/assets/main.css");
+
 #[component]
 pub fn App() -> Element {
     let mut graph = use_signal(GraphData::default);
@@ -13,6 +15,7 @@ pub fn App() -> Element {
     let mut selection = use_signal(Selection::default);
 
     rsx! {
+        document::Stylesheet { href: MAIN_CSS }
         div { class: "app-container",
             div { class: "top-bar",
                 h1 { "Ledger Graph UI" }

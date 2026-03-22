@@ -35,7 +35,7 @@ pub fn QueryEditor(on_result: EventHandler<GraphData>) -> Element {
             h3 { "Cypher Query" }
             textarea {
                 class: "cypher-input",
-                rows: 4,
+                rows: 6,
                 value: "{cypher}",
                 oninput: move |evt| cypher.set(evt.value()),
             }

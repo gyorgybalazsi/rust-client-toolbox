@@ -18,3 +18,4 @@ tokio = { workspace = true, optional = true }
 default = []
 server = ["dioxus/server", "dep:neo4rs", "dep:tokio"]
 web = ["dioxus/web"]
+
