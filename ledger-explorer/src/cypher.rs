@@ -18,6 +18,16 @@ pub struct FlattenConfig {
     pub store_arguments_json: bool,
 }
 
+impl Default for FlattenConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_depth: 10,
+            store_arguments_json: false,
+        }
+    }
+}
+
 /// Wrapper around neo4rs::Query that preserves the cypher string and params for debugging
 #[derive(Clone)]
 pub struct CypherQuery {
@@ -217,7 +227,7 @@ pub fn get_updates_response_to_cypher(
                     let create_arguments_json = created
                         .create_arguments
                         .as_ref()
-                        .map(|args| api_record_to_json(args))
+                        .map(api_record_to_json)
                         .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
                         .unwrap_or("null".to_string());
                     let create_arguments = created
@@ -443,27 +453,26 @@ pub fn get_updates_response_to_cypher(
     let mut requesting_parties: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for event in &transaction.events {
-        if let Some(Event::Exercised(exercised)) = &event.event {
-            if !child_node_ids.contains(&exercised.node_id) {
-                for party in &exercised.acting_parties {
-                    requesting_parties.insert(party.clone());
-                }
-                root_exercised.push(json!({
-                    "offset": offset,
-                    "node_id": exercised.node_id
-                }));
+        if let Some(Event::Exercised(exercised)) = &event.event
+            && !child_node_ids.contains(&exercised.node_id)
+        {
+            for party in &exercised.acting_parties {
+                requesting_parties.insert(party.clone());
             }
-        }
-        if let Some(Event::Created(created)) = &event.event {
-            if !child_node_ids.contains(&created.node_id) {
-                for party in &created.signatories {
-                    requesting_parties.insert(party.clone());
-                }
-                root_created.push(json!({
-                    "offset": offset,
-                    "node_id": created.node_id
-                }));
+            root_exercised.push(json!({
+                "offset": offset,
+                "node_id": exercised.node_id
+            }));
+        } else if let Some(Event::Created(created)) = &event.event
+            && !child_node_ids.contains(&created.node_id)
+        {
+            for party in &created.signatories {
+                requesting_parties.insert(party.clone());
             }
+            root_created.push(json!({
+                "offset": offset,
+                "node_id": created.node_id
+            }));
         }
     }
 
@@ -599,7 +608,7 @@ pub fn created_event_to_cypher(created: &CreatedEvent, flatten: FlattenConfig) -
         let create_arguments_json = created
             .create_arguments
             .as_ref()
-            .map(|args| api_record_to_json(args))
+            .map(api_record_to_json)
             .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
             .unwrap_or("null".to_string());
         query = query

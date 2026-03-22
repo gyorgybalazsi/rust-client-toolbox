@@ -63,7 +63,7 @@ fn api_value_to_json(value: &Value) -> serde_json::Value {
         Some(ledger_api::com::daml::ledger::api::v2::value::Sum::Variant(variant)) => {
             json!({
                 "constructor": &variant.constructor,
-                "value": variant.value.as_ref().map(|v| api_value_to_json(&**v)).unwrap_or(json!("Couldn't convert"))
+                "value": variant.value.as_ref().map(|v| api_value_to_json(v)).unwrap_or(json!("Couldn't convert"))
             })
         }
         Some(ledger_api::com::daml::ledger::api::v2::value::Sum::Enum(enum_val)) => {
@@ -100,9 +100,8 @@ pub fn flatten_record_to_properties(
     let mut result = Vec::new();
     for field in &record.fields {
         let key = format!("{}{}", prefix, field.label);
-        match &field.value {
-            Some(val) => flatten_value_inner(val, &key, max_depth, 0, &mut result),
-            None => {}
+        if let Some(val) = &field.value {
+            flatten_value_inner(val, &key, max_depth, 0, &mut result);
         }
     }
     result
@@ -119,9 +118,8 @@ pub fn flatten_value_to_properties(
     if let Some(ledger_api::com::daml::ledger::api::v2::value::Sum::Record(record)) = &value.sum {
         for field in &record.fields {
             let key = format!("{}{}", prefix, field.label);
-            match &field.value {
-                Some(val) => flatten_value_inner(val, &key, max_depth, 0, &mut result),
-                None => {}
+            if let Some(val) = &field.value {
+                flatten_value_inner(val, &key, max_depth, 0, &mut result);
             }
         }
     } else {
@@ -158,9 +156,8 @@ fn flatten_value_inner(
         Some(Sum::Record(rec)) => {
             for field in &rec.fields {
                 let nested_key = format!("{}.{}", key, field.label);
-                match &field.value {
-                    Some(val) => flatten_value_inner(val, &nested_key, max_depth, depth + 1, result),
-                    None => {}
+                if let Some(val) = &field.value {
+                    flatten_value_inner(val, &nested_key, max_depth, depth + 1, result);
                 }
             }
         }

@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parties = vec![party];
             let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
             while let Some(response) = update_stream.next().await {
-                let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig { enabled: true, max_depth: 10, store_arguments_json: false });
+                let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig::default());
                 println!("Start transaction");
                 println!("{:?}", cypher_queries);
                 println!("End transaction");
@@ -108,6 +108,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = match config_file {
                 Some(path) => ledger_explorer::config::read_config(&path, profile.as_deref()).expect("failed to read config"),
                 None => ledger_explorer::config::read_config_from_toml(profile.as_deref()).expect("failed to read config"),
+            };
+            let flatten_config = cypher::FlattenConfig {
+                enabled: config.storage.flatten_arguments,
+                max_depth: config.storage.flatten_max_depth,
+                store_arguments_json: config.storage.store_arguments_json,
             };
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
@@ -166,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if raw_count >= count {
                             break;
                         }
-                        if raw_count % 1000 == 0 {
+                        if raw_count.is_multiple_of(1000) {
                             let elapsed = start_time.elapsed().as_secs_f64();
                             info!("[Raw Stream] {} updates, {:.1} updates/s, offset {}", raw_count, raw_count as f64 / elapsed, last_offset);
                         }
@@ -195,13 +200,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(response) = update_stream.next().await {
                 match response {
                     Ok(resp) => {
-                        let queries = cypher::get_updates_response_to_cypher(&resp, cypher::FlattenConfig { enabled: true, max_depth: 10, store_arguments_json: false });
+                        let queries = cypher::get_updates_response_to_cypher(&resp, flatten_config);
                         total_queries += queries.len();
                         cypher_count += 1;
                         if cypher_count >= count {
                             break;
                         }
-                        if cypher_count % 1000 == 0 {
+                        if cypher_count.is_multiple_of(1000) {
                             let elapsed = start_time.elapsed().as_secs_f64();
                             info!("[Stream+Cypher] {} updates, {:.1} updates/s", cypher_count, cypher_count as f64 / elapsed);
                         }

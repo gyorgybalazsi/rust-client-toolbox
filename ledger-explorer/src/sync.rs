@@ -72,7 +72,7 @@ async fn ensure_indexes(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> 
     ];
 
     for index_query in &indexes {
-        match graph.run(query(*index_query)).await {
+        match graph.run(query(index_query)).await {
             Ok(_) => debug!("Index ensured: {}", index_query),
             Err(e) => warn!("Failed to create index (may already exist): {} - {}", index_query, e),
         }
@@ -125,7 +125,7 @@ async fn load_acs_to_neo4j(
                 // Commit in batches
                 if batch_queries.len() >= BATCH_SIZE {
                     let mut txn = graph.start_txn().await?;
-                    let queries_to_run: Vec<neo4rs::Query> = batch_queries.drain(..).collect();
+                    let queries_to_run: Vec<neo4rs::Query> = std::mem::take(&mut batch_queries);
                     txn.run_queries(queries_to_run).await?;
                     txn.commit().await?;
                     debug!("Committed batch of ACS contracts, total so far: {}", contract_count);
@@ -292,12 +292,10 @@ pub async fn run_resilient_sync(
                 } else {
                     "rate: stalled".to_string()
                 }
+            } else if let Some(end) = ledger_end {
+                format!("ledger end: {}, remaining: {}", end, end - current_offset)
             } else {
-                if let Some(end) = ledger_end {
-                    format!("ledger end: {}, remaining: {}", end, end - current_offset)
-                } else {
-                    "calculating...".to_string()
-                }
+                "calculating...".to_string()
             };
 
             info!("[Progress] Neo4j offset: {}, {}", current_offset, rate_info);
