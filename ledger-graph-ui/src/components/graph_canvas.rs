@@ -4,6 +4,26 @@ use crate::models::graph::GraphData;
 use crate::state::graph_state::{Selection, Viewport};
 use dioxus::prelude::*;
 
+const PADDING: f64 = 80.0;
+
+fn compute_view_box(graph: &GraphData) -> String {
+    if graph.nodes.is_empty() {
+        return "0 0 800 600".to_string();
+    }
+
+    let min_x = graph.nodes.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
+    let max_x = graph.nodes.iter().map(|n| n.x).fold(f64::NEG_INFINITY, f64::max);
+    let min_y = graph.nodes.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
+    let max_y = graph.nodes.iter().map(|n| n.y).fold(f64::NEG_INFINITY, f64::max);
+
+    let x = min_x - PADDING;
+    let y = min_y - PADDING;
+    let w = (max_x - min_x + PADDING * 2.0).max(200.0);
+    let h = (max_y - min_y + PADDING * 2.0).max(200.0);
+
+    format!("{x} {y} {w} {h}")
+}
+
 #[component]
 pub fn GraphCanvas(
     graph: GraphData,
@@ -15,6 +35,8 @@ pub fn GraphCanvas(
         "translate({},{}) scale({})",
         vp.offset_x, vp.offset_y, vp.zoom
     );
+
+    let view_box = compute_view_box(&graph);
 
     // Pan: track mouse drag on background
     let mut dragging = use_signal(|| false);
@@ -62,8 +84,8 @@ pub fn GraphCanvas(
     rsx! {
         svg {
             class: "graph-canvas",
-            width: "100%",
-            height: "100%",
+            view_box: view_box,
+            preserve_aspect_ratio: "xMidYMid meet",
             onmousedown: on_mouse_down,
             onmousemove: on_mouse_move,
             onmouseup: on_mouse_up,
@@ -71,8 +93,10 @@ pub fn GraphCanvas(
 
             // Background
             rect {
-                width: "100%",
-                height: "100%",
+                width: "10000",
+                height: "10000",
+                x: "-5000",
+                y: "-5000",
                 fill: "#f8f9fa",
             }
 
