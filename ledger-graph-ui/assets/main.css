@@ -170,6 +170,37 @@ html, body {
     word-break: break-word;
 }
 
+/* Query templates */
+.query-templates {
+    margin-top: 12px;
+    border-top: 1px solid #1a1a5e;
+    padding-top: 8px;
+}
+
+.query-templates h4 {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 6px;
+}
+
+.template-btn {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a1a5e;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+}
+
+.template-btn:hover {
+    background: #1a4a8e;
+}
+
 /* Sidebar */
 .sidebar h3 {
     font-size: 14px;
