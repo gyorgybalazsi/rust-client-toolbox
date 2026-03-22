@@ -6,5 +6,5 @@ event-graph/neo4j/
 .venv
 ledger-explorer/config/config.toml
 sync.log
-plans/
+plans
 .claude/

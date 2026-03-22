@@ -453,6 +453,8 @@ name = "codegen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
+ "daml-type-rep",
  "ledger-api",
  "prettyplease",
  "proc-macro2",
