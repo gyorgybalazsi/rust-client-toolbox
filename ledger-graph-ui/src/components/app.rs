@@ -130,11 +130,15 @@ pub fn App() -> Element {
     let mut full_data = use_signal(GraphData::default);
     let mut replay_step = use_signal(|| Option::<usize>::None); // None = not replaying
     let mut replay_total = use_signal(|| 0usize);
+    let mut auto_replay = use_signal(|| false); // true = auto-advance, false = manual step
 
-    // Replay timer: when replay_step is Some, advance every 800ms
+    // Replay timer: when auto_replay and replay_step is Some, advance every 3s
     let _replay_timer = use_future(move || async move {
         loop {
             gloo_timers::future::TimeoutFuture::new(3000).await;
+            if !*auto_replay.read() {
+                continue;
+            }
             let step = *replay_step.read();
             let total = *replay_total.read();
             if let Some(s) = step {
@@ -148,20 +152,40 @@ pub fn App() -> Element {
                 } else {
                     // Replay finished
                     replay_step.set(None);
+                    auto_replay.set(false);
                 }
             }
         }
     });
 
+    // Advance one step manually
+    let advance_step = move || {
+        let step = *replay_step.read();
+        let total = *replay_total.read();
+        if let Some(s) = step {
+            if s < total.saturating_sub(1) {
+                let next = s + 1;
+                replay_step.set(Some(next));
+                let data = full_data.read().clone();
+                let subtrees = compute_tx_subtrees(&data);
+                let sub = subgraph_at_step(&data, &subtrees, next);
+                graph.set(sub);
+            } else {
+                replay_step.set(None);
+                auto_replay.set(false);
+            }
+        }
+    };
+
     let on_result = move |data: GraphData| {
-        // Stop any ongoing replay
         replay_step.set(None);
+        auto_replay.set(false);
         graph.set(data.clone());
         full_data.set(data);
         selection.set(Selection::default());
     };
 
-    let on_replay = move |data: GraphData| {
+    let mut start_replay = move |data: GraphData, auto: bool| {
         let subtrees = compute_tx_subtrees(&data);
         let total = subtrees.len();
         if total == 0 {
@@ -171,11 +195,24 @@ pub fn App() -> Element {
         }
         full_data.set(data.clone());
         replay_total.set(total);
-        // Show first step immediately
+        auto_replay.set(auto);
         let sub = subgraph_at_step(&data, &subtrees, 0);
         graph.set(sub);
         selection.set(Selection::default());
         replay_step.set(Some(0));
+    };
+
+    let on_replay = move |data: GraphData| {
+        start_replay(data, true);
+    };
+
+    let on_step_start = move |data: GraphData| {
+        start_replay(data, false);
+    };
+
+    let mut advance_step = advance_step;
+    let on_step_next = move |_: ()| {
+        advance_step();
     };
 
     let is_replaying = replay_step.read().is_some();
@@ -199,6 +236,9 @@ pub fn App() -> Element {
                     QueryEditor {
                         on_result: on_result,
                         on_replay: on_replay,
+                        on_step_start: on_step_start,
+                        on_step_next: on_step_next,
+                        is_stepping: is_replaying && !*auto_replay.read(),
                     }
                 }
                 div { class: "center-panel",

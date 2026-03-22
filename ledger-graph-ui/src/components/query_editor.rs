@@ -7,6 +7,9 @@ use std::collections::HashMap;
 pub fn QueryEditor(
     on_result: EventHandler<GraphData>,
     on_replay: EventHandler<GraphData>,
+    on_step_start: EventHandler<GraphData>,
+    on_step_next: EventHandler<()>,
+    is_stepping: bool,
 ) -> Element {
     let mut cypher = use_signal(|| {
         "MATCH (t:Transaction)-[r]->(e) RETURN t, r, e LIMIT 50".to_string()
@@ -20,12 +23,8 @@ pub fn QueryEditor(
         error.set(None);
         spawn(async move {
             match run_cypher(query, HashMap::new()).await {
-                Ok(data) => {
-                    on_result.call(data);
-                }
-                Err(e) => {
-                    error.set(Some(format!("{e}")));
-                }
+                Ok(data) => on_result.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
             }
             loading.set(false);
         });
@@ -37,15 +36,28 @@ pub fn QueryEditor(
         error.set(None);
         spawn(async move {
             match run_cypher(query, HashMap::new()).await {
-                Ok(data) => {
-                    on_replay.call(data);
-                }
-                Err(e) => {
-                    error.set(Some(format!("{e}")));
-                }
+                Ok(data) => on_replay.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
             }
             loading.set(false);
         });
+    };
+
+    let step_start = move |_| {
+        let query = cypher.read().clone();
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            match run_cypher(query, HashMap::new()).await {
+                Ok(data) => on_step_start.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
+            }
+            loading.set(false);
+        });
+    };
+
+    let step_next = move |_| {
+        on_step_next.call(());
     };
 
     let is_loading = *loading.read();
@@ -71,6 +83,22 @@ pub fn QueryEditor(
                     disabled: is_loading,
                     onclick: replay,
                     "Replay"
+                }
+            }
+            div { class: "query-actions",
+                if is_stepping {
+                    button {
+                        class: "step-btn",
+                        onclick: step_next,
+                        "Next Step"
+                    }
+                } else {
+                    button {
+                        class: "step-btn",
+                        disabled: is_loading,
+                        onclick: step_start,
+                        "Step by Step"
+                    }
                 }
             }
             if let Some(err) = error.read().as_ref() {
