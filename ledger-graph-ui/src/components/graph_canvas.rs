@@ -81,6 +81,14 @@ pub fn GraphCanvas(
 
     let sel = selection.read().clone();
 
+    // Compute set of node IDs that have an incoming CONSUMES edge
+    let consumed_ids: std::collections::HashSet<&str> = graph
+        .edges
+        .iter()
+        .filter(|e| e.rel_type == crate::models::graph::RelType::Consumes)
+        .map(|e| e.target.as_str())
+        .collect();
+
     rsx! {
         svg {
             class: "graph-canvas",
@@ -127,12 +135,14 @@ pub fn GraphCanvas(
                 for node in graph.nodes.iter() {
                     {
                         let is_selected = sel.selected_node_id.as_ref() == Some(&node.id);
+                        let is_consumed = consumed_ids.contains(node.id.as_str());
                         let mut sel_signal = selection;
                         rsx! {
                             GraphNodeView {
                                 key: "{node.id}",
                                 node: node.clone(),
                                 is_selected: is_selected,
+                                is_consumed: is_consumed,
                                 on_click: move |id: String| {
                                     sel_signal.write().selected_node_id = Some(id);
                                 },

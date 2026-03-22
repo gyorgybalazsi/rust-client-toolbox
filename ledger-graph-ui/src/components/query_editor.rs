@@ -50,6 +50,16 @@ pub fn QueryEditor(on_result: EventHandler<GraphData>) -> Element {
             if let Some(err) = error.read().as_ref() {
                 div { class: "query-error", "{err}" }
             }
+            div { class: "query-templates",
+                h4 { "Templates" }
+                button {
+                    class: "template-btn",
+                    onclick: move |_| {
+                        cypher.set("MATCH (n)\nOPTIONAL MATCH path = (n)-[r]-(m)\nRETURN n, r, m\nLIMIT 100".to_string());
+                    },
+                    "Query All"
+                }
+            }
         }
     }
 }

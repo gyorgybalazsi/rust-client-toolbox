@@ -7,6 +7,7 @@ const NODE_RADIUS: f64 = 20.0;
 pub fn GraphNodeView(
     node: GraphNode,
     is_selected: bool,
+    is_consumed: bool,
     on_click: EventHandler<String>,
 ) -> Element {
     let color = node.label.color();
@@ -45,6 +46,7 @@ pub fn GraphNodeView(
         }
         NodeLabel::Created => {
             // Circle
+            let r = NODE_RADIUS;
             rsx! {
                 g {
                     onclick: move |_| on_click.call(id.clone()),
@@ -52,10 +54,30 @@ pub fn GraphNodeView(
                     circle {
                         cx: node.x,
                         cy: node.y,
-                        r: NODE_RADIUS,
+                        r: r,
                         fill: color,
                         stroke: stroke,
                         stroke_width: stroke_width,
+                    }
+                    if is_consumed {
+                        line {
+                            x1: node.x - r * 0.6,
+                            y1: node.y - r * 0.6,
+                            x2: node.x + r * 0.6,
+                            y2: node.y + r * 0.6,
+                            stroke: "#E74C3C",
+                            stroke_width: 3.0,
+                            stroke_linecap: "round",
+                        }
+                        line {
+                            x1: node.x + r * 0.6,
+                            y1: node.y - r * 0.6,
+                            x2: node.x - r * 0.6,
+                            y2: node.y + r * 0.6,
+                            stroke: "#E74C3C",
+                            stroke_width: 3.0,
+                            stroke_linecap: "round",
+                        }
                     }
                     text {
                         x: node.x,
