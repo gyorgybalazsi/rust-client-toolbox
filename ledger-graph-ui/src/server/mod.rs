@@ -1,3 +1,3 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 pub mod neo4j_pool;
 pub mod queries;
