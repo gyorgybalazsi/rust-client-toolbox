@@ -99,6 +99,11 @@ pub fn GraphCanvas(
             onmouseup: on_mouse_up,
             onwheel: on_wheel,
 
+            // Definitions: drop shadow, selection glow
+            defs {
+                dangerous_inner_html: "<filter id=\"shadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"140%\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"3\" result=\"blur\"/><feOffset dx=\"2\" dy=\"2\" result=\"shifted\"/><feFlood flood-color=\"rgba(0,0,0,0.25)\" result=\"color\"/><feComposite in=\"color\" in2=\"shifted\" operator=\"in\" result=\"shadow\"/><feMerge><feMergeNode in=\"shadow\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter><filter id=\"glow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"4\" result=\"blur\"/><feFlood flood-color=\"gold\" result=\"color\"/><feComposite in=\"color\" in2=\"blur\" operator=\"in\" result=\"glow\"/><feMerge><feMergeNode in=\"glow\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter>",
+            }
+
             // Background
             rect {
                 width: "10000",
