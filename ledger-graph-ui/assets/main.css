@@ -140,7 +140,7 @@ html, body {
     gap: 6px;
 }
 
-.execute-btn, .replay-btn {
+.execute-btn, .replay-btn, .step-btn {
     flex: 1;
     padding: 8px;
     color: white;
@@ -159,6 +159,10 @@ html, body {
     background: #50C878;
 }
 
+.step-btn {
+    background: #F5A623;
+}
+
 .execute-btn:hover:not(:disabled) {
     background: #357ABD;
 }
@@ -167,7 +171,11 @@ html, body {
     background: #3da85e;
 }
 
-.execute-btn:disabled, .replay-btn:disabled {
+.step-btn:hover:not(:disabled) {
+    background: #d4901e;
+}
+
+.execute-btn:disabled, .replay-btn:disabled, .step-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
