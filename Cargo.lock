@@ -2521,6 +2521,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dioxus",
+ "gloo-timers",
  "neo4rs",
  "serde",
  "serde_json",
