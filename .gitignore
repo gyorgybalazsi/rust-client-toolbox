@@ -7,3 +7,4 @@ event-graph/neo4j/
 ledger-explorer/config/config.toml
 sync.log
 plans
+.claude/

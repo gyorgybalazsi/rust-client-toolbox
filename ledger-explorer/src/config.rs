@@ -13,6 +13,41 @@ pub struct ConfigFile {
     pub active_profile: String,
     /// Named profiles containing ledger and keycloak settings
     pub profiles: HashMap<String, ProfileConfig>,
+    /// Storage behavior settings
+    #[serde(default)]
+    pub storage: StorageConfig,
+}
+
+/// Controls how event data is stored in Neo4j
+#[derive(Debug, Deserialize, Clone)]
+pub struct StorageConfig {
+    /// Flatten create/choice arguments into dot-separated Neo4j node properties
+    #[serde(default = "default_true")]
+    pub flatten_arguments: bool,
+    /// Maximum recursion depth for flattening nested records
+    #[serde(default = "default_flatten_max_depth")]
+    pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as create_arguments_json / choice_argument_json properties
+    #[serde(default)]
+    pub store_arguments_json: bool,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            flatten_arguments: true,
+            flatten_max_depth: 10,
+            store_arguments_json: false,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_flatten_max_depth() -> usize {
+    10
 }
 
 /// A named profile containing environment-specific settings
@@ -29,6 +64,7 @@ pub struct Config {
     pub neo4j: Neo4jConfig,
     pub ledger: LedgerConfig,
     pub keycloak: Option<KeycloakConfig>,
+    pub storage: StorageConfig,
 }
 
 /// Authentication method for Keycloak
@@ -138,6 +174,7 @@ pub fn resolve_config(config_file: ConfigFile, profile_override: Option<&str>) -
         neo4j: config_file.neo4j,
         ledger: profile.ledger.clone(),
         keycloak: profile.keycloak.clone(),
+        storage: config_file.storage,
     })
 }
 
