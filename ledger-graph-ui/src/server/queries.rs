@@ -70,7 +70,7 @@ fn make_display_name(label: &NodeLabel, props: &HashMap<String, serde_json::Valu
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 fn extract_node(node: &neo4rs::Node) -> GraphNode {
     let labels: Vec<String> = node.labels().iter().map(|l| l.to_string()).collect();
     let label = parse_node_label(&labels);
@@ -94,7 +94,7 @@ fn extract_node(node: &neo4rs::Node) -> GraphNode {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "server")]
 fn extract_relation(rel: &neo4rs::Relation) -> GraphEdge {
     let rel_type = parse_rel_type(rel.typ());
     let properties: HashMap<String, serde_json::Value> = rel

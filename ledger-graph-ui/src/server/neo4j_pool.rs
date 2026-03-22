@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 static NEO4J: OnceLock<neo4rs::Graph> = OnceLock::new();
 
-pub async fn init(config: &Neo4jConfig) -> Result<()> {
+pub fn init(config: &Neo4jConfig) -> Result<()> {
     let graph = neo4rs::Graph::new(&config.uri, &config.user, &config.password)?;
     NEO4J
         .set(graph)
