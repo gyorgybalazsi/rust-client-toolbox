@@ -136,12 +136,13 @@ html, body {
 
 .query-actions {
     margin: 0;
+    display: flex;
+    gap: 6px;
 }
 
-.execute-btn {
-    width: 100%;
+.execute-btn, .replay-btn {
+    flex: 1;
     padding: 8px;
-    background: #4A90D9;
     color: white;
     border: none;
     border-radius: 4px;
@@ -150,13 +151,32 @@ html, body {
     font-weight: 500;
 }
 
+.execute-btn {
+    background: #4A90D9;
+}
+
+.replay-btn {
+    background: #50C878;
+}
+
 .execute-btn:hover:not(:disabled) {
     background: #357ABD;
 }
 
-.execute-btn:disabled {
+.replay-btn:hover:not(:disabled) {
+    background: #3da85e;
+}
+
+.execute-btn:disabled, .replay-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.replay-status {
+    font-size: 13px;
+    color: #50C878;
+    margin-right: 12px;
+    font-weight: 500;
 }
 
 .query-error {
