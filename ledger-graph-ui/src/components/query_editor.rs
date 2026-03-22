@@ -1,0 +1,119 @@
+use crate::models::graph::GraphData;
+use crate::server::queries::run_cypher;
+use dioxus::prelude::*;
+use std::collections::HashMap;
+
+#[component]
+pub fn QueryEditor(
+    on_result: EventHandler<GraphData>,
+    on_replay: EventHandler<GraphData>,
+    on_step_start: EventHandler<GraphData>,
+    on_step_next: EventHandler<()>,
+    is_stepping: bool,
+) -> Element {
+    let mut cypher = use_signal(|| {
+        "MATCH (t:Transaction)-[r]->(e) RETURN t, r, e LIMIT 50".to_string()
+    });
+    let mut error = use_signal(|| Option::<String>::None);
+    let mut loading = use_signal(|| false);
+
+    let execute = move |_| {
+        let query = cypher.read().clone();
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            match run_cypher(query, HashMap::new()).await {
+                Ok(data) => on_result.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
+            }
+            loading.set(false);
+        });
+    };
+
+    let replay = move |_| {
+        let query = cypher.read().clone();
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            match run_cypher(query, HashMap::new()).await {
+                Ok(data) => on_replay.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
+            }
+            loading.set(false);
+        });
+    };
+
+    let step_start = move |_| {
+        let query = cypher.read().clone();
+        loading.set(true);
+        error.set(None);
+        spawn(async move {
+            match run_cypher(query, HashMap::new()).await {
+                Ok(data) => on_step_start.call(data),
+                Err(e) => error.set(Some(format!("{e}"))),
+            }
+            loading.set(false);
+        });
+    };
+
+    let step_next = move |_| {
+        on_step_next.call(());
+    };
+
+    let is_loading = *loading.read();
+
+    rsx! {
+        div { class: "query-editor",
+            h3 { "Cypher Query" }
+            textarea {
+                class: "cypher-input",
+                rows: 6,
+                value: "{cypher}",
+                oninput: move |evt| cypher.set(evt.value()),
+            }
+            div { class: "query-actions",
+                button {
+                    class: "execute-btn",
+                    disabled: is_loading,
+                    onclick: execute,
+                    if is_loading { "Running..." } else { "Execute" }
+                }
+                button {
+                    class: "replay-btn",
+                    disabled: is_loading,
+                    onclick: replay,
+                    "Replay"
+                }
+            }
+            div { class: "query-actions",
+                if is_stepping {
+                    button {
+                        class: "step-btn",
+                        onclick: step_next,
+                        "Next Step"
+                    }
+                } else {
+                    button {
+                        class: "step-btn",
+                        disabled: is_loading,
+                        onclick: step_start,
+                        "Step by Step"
+                    }
+                }
+            }
+            if let Some(err) = error.read().as_ref() {
+                div { class: "query-error", "{err}" }
+            }
+            div { class: "query-templates",
+                h4 { "Templates" }
+                button {
+                    class: "template-btn",
+                    onclick: move |_| {
+                        cypher.set("MATCH (n)\nOPTIONAL MATCH path = (n)-[r]-(m)\nRETURN n, r, m\nLIMIT 100".to_string());
+                    },
+                    "Query All"
+                }
+            }
+        }
+    }
+}
