@@ -185,20 +185,24 @@ pub fn GraphNodeView(
             }
         }
         NodeLabel::Created => {
-            let opacity = if is_consumed { "0.5" } else { "1" };
+            // Consumed/archived nodes get washed-out solid colors
+            let (fill_main, fill_overlay, ring_color, label_color) = if is_consumed {
+                ("#C8D8C8", "#B0C4B0", "#BFCFBF", "#8a9a8a")
+            } else {
+                (light, color, light, txt_color)
+            };
             rsx! {
                 g {
                     onclick: move |_| on_click.call(id.clone()),
                     cursor: "pointer",
                     filter: filter,
-                    opacity: opacity,
                     // Outer ring
                     circle {
                         cx: node.x,
                         cy: node.y,
                         r: R + 2.0,
                         fill: "none",
-                        stroke: light,
+                        stroke: ring_color,
                         stroke_width: 2.0,
                         opacity: "0.4",
                     }
@@ -207,7 +211,7 @@ pub fn GraphNodeView(
                         cx: node.x,
                         cy: node.y,
                         r: R,
-                        fill: light,
+                        fill: fill_main,
                         stroke: stroke,
                         stroke_width: stroke_w,
                     }
@@ -215,33 +219,12 @@ pub fn GraphNodeView(
                         cx: node.x,
                         cy: node.y,
                         r: R,
-                        fill: color,
+                        fill: fill_overlay,
                         opacity: "0.6",
                         stroke: "none",
                     }
                     // Icon
                     NodeIcon { label: node_label.clone(), cx: node.x, cy: node.y, size: 24.0 }
-                    // Consumed X
-                    if is_consumed {
-                        line {
-                            x1: node.x - R * 0.55,
-                            y1: node.y - R * 0.55,
-                            x2: node.x + R * 0.55,
-                            y2: node.y + R * 0.55,
-                            stroke: "#C0392B",
-                            stroke_width: 3.5,
-                            stroke_linecap: "round",
-                        }
-                        line {
-                            x1: node.x + R * 0.55,
-                            y1: node.y - R * 0.55,
-                            x2: node.x - R * 0.55,
-                            y2: node.y + R * 0.55,
-                            stroke: "#C0392B",
-                            stroke_width: 3.5,
-                            stroke_linecap: "round",
-                        }
-                    }
                     // Label below
                     text {
                         x: node.x,
@@ -249,7 +232,7 @@ pub fn GraphNodeView(
                         text_anchor: "middle",
                         font_size: "10px",
                         font_weight: "500",
-                        fill: txt_color,
+                        fill: label_color,
                         {node.display_name.clone()}
                     }
                 }
