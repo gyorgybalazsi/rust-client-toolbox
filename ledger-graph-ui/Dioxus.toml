@@ -1,0 +1,8 @@
+[application]
+name = "ledger-graph-ui"
+
+[web.app]
+title = "Ledger Graph UI"
+
+[web.resource]
+style = ["assets/main.css"]
