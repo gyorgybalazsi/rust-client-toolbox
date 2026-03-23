@@ -95,8 +95,8 @@ html, body {
 
 /* Right panel — node properties */
 .right-panel {
-    width: 280px;
-    min-width: 240px;
+    width: 336px;
+    min-width: 288px;
     background: #16213e;
     border-left: 1px solid #0f3460;
     overflow-y: auto;
@@ -231,19 +231,19 @@ html, body {
 
 /* Sidebar */
 .sidebar h3 {
-    font-size: 14px;
+    font-size: 20px;
     margin-bottom: 12px;
     color: #aaa;
 }
 
 .no-selection {
     color: #666;
-    font-size: 13px;
+    font-size: 19px;
     font-style: italic;
 }
 
 .node-detail {
-    font-size: 13px;
+    font-size: 19px;
 }
 
 .label-badge {
@@ -251,26 +251,26 @@ html, body {
     padding: 2px 8px;
     border-radius: 12px;
     color: white;
-    font-size: 12px;
+    font-size: 17px;
     font-weight: 500;
 }
 
 .node-name {
-    font-size: 16px;
+    font-size: 23px;
     font-weight: 600;
     margin: 8px 0 4px;
 }
 
 .node-id {
     color: #888;
-    font-size: 11px;
+    font-size: 16px;
     font-family: monospace;
     margin-bottom: 12px;
     word-break: break-all;
 }
 
 .node-detail h4 {
-    font-size: 13px;
+    font-size: 19px;
     color: #aaa;
     margin-bottom: 6px;
     border-top: 1px solid #0f3460;
@@ -287,7 +287,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.4;
     padding: 4px 0;
     border-bottom: 1px solid #0f346033;
