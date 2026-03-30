@@ -8,3 +8,4 @@ ledger-explorer/config/config.toml
 sync.log
 plans
 .claude/
+.tokensave/
