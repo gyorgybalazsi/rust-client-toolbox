@@ -1,0 +1,16 @@
+[application]
+name = "ledger-graph-ui"
+
+[web.app]
+title = "Ledger Graph UI"
+
+[web.resource.dev]
+style = ["assets/main.css"]
+
+[server.features]
+default = false
+features = ["server"]
+
+[web.features]
+default = false
+features = ["web"]
