@@ -1,3 +1,4 @@
+use crate::components::analytics::Analytics;
 use crate::components::graph_canvas::GraphCanvas;
 use crate::components::query_editor::QueryEditor;
 use crate::components::sidebar::Sidebar;
@@ -277,11 +278,7 @@ pub fn App() -> Element {
                 }
             }
             if *active_tab.read() == ActiveTab::Analytics {
-                div { class: "main-content",
-                    div { class: "center-panel",
-                        p { "Analytics tab — coming soon" }
-                    }
-                }
+                div { class: "main-content", Analytics {} }
             }
         }
     }

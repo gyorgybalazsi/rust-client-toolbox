@@ -1,3 +1,4 @@
+pub mod analytics;
 pub mod analytics_chart;
 pub mod analytics_queries;
 pub mod app;
