@@ -299,9 +299,6 @@ pub async fn run_analytics_query(
 
     // Step 1: If time bounds set, determine offset range
     let (min_off, max_off) = if min_time.is_some() || max_time.is_some() {
-        let mut where_clauses = Vec::new();
-        let mut bound_query = neo4rs::query("MATCH (t:Transaction) RETURN min(t.offset) AS min_off, max(t.offset) AS max_off");
-
         // Build dynamic WHERE clause
         let mut cypher_str = String::from("MATCH (t:Transaction) WHERE ");
         let mut conditions = Vec::new();
@@ -893,11 +890,12 @@ git commit -m "feat: add analytics queries left panel component"
 
 ---
 
-### Task 6: SVG line chart component
+### Task 6: SVG line chart component + add web-sys dependency
 
 **Files:**
 - Create: `ledger-graph-ui/src/components/analytics_chart.rs`
 - Modify: `ledger-graph-ui/src/components/mod.rs`
+- Modify: `ledger-graph-ui/Cargo.toml`
 
 - [ ] **Step 1: Create analytics_chart.rs**
 
@@ -1157,7 +1155,7 @@ pub fn AnalyticsChart(
                 }
             }
 
-            // Zoom slider
+            // Zoom slider (HTML range inputs — avoids SVG coordinate issues)
             ZoomSlider {
                 data_min,
                 data_max,
@@ -1170,7 +1168,9 @@ pub fn AnalyticsChart(
     }
 }
 
-/// Two-handle range slider rendered as SVG below the chart
+/// Two-handle zoom slider using HTML range inputs.
+/// Avoids SVG coordinate mapping complexity. Two overlapping range inputs
+/// where left controls zoom_min and right controls zoom_max.
 #[component]
 fn ZoomSlider(
     data_min: i64,
@@ -1180,108 +1180,57 @@ fn ZoomSlider(
     offset_dates: Vec<(i64, String)>,
     on_change: EventHandler<(i64, i64)>,
 ) -> Element {
-    let slider_width = CHART_WIDTH - CHART_PADDING_LEFT - CHART_PADDING_RIGHT;
-    let range = (data_max - data_min).max(1) as f64;
-
-    let left_x = CHART_PADDING_LEFT + (zoom_min - data_min) as f64 / range * slider_width;
-    let right_x = CHART_PADDING_LEFT + (zoom_max - data_min) as f64 / range * slider_width;
-
-    // Find dates for handle labels
+    // Find dates for labels
     let left_date = offset_dates.iter()
         .find(|(o, _)| *o >= zoom_min)
-        .map(|(_, d)| &d[..10.min(d.len())])
-        .unwrap_or("");
+        .map(|(_, d)| d[..10.min(d.len())].to_string())
+        .unwrap_or_default();
     let right_date = offset_dates.iter()
         .rfind(|(o, _)| *o <= zoom_max)
-        .map(|(_, d)| &d[..10.min(d.len())])
-        .unwrap_or("");
+        .map(|(_, d)| d[..10.min(d.len())].to_string())
+        .unwrap_or_default();
 
-    // Mouse drag state
-    let mut dragging = use_signal(|| Option::<&'static str>::None); // "left", "right", or None
-    let mut drag_start_x = use_signal(|| 0.0f64);
-    let mut drag_start_val = use_signal(|| 0i64);
+    let on_left_change = {
+        move |evt: FormEvent| {
+            if let Ok(val) = evt.value().parse::<i64>() {
+                let clamped = val.min(zoom_max - 1);
+                on_change.call((clamped, zoom_max));
+            }
+        }
+    };
 
-    let on_bg_click = {
-        move |evt: MouseEvent| {
-            // Click on track: move nearest handle to click position
-            let coords = evt.client_coordinates();
-            let frac = (coords.x - CHART_PADDING_LEFT as f64) / slider_width;
-            let offset = data_min + (frac * range) as i64;
-            let offset = offset.clamp(data_min, data_max);
-
-            let dist_left = (offset - zoom_min).abs();
-            let dist_right = (offset - zoom_max).abs();
-            if dist_left <= dist_right {
-                on_change.call((offset, zoom_max));
-            } else {
-                on_change.call((zoom_min, offset));
+    let on_right_change = {
+        move |evt: FormEvent| {
+            if let Ok(val) = evt.value().parse::<i64>() {
+                let clamped = val.max(zoom_min + 1);
+                on_change.call((zoom_min, clamped));
             }
         }
     };
 
     rsx! {
-        svg {
-            class: "zoom-slider",
-            view_box: format!("0 0 {CHART_WIDTH} 50"),
-            preserve_aspect_ratio: "xMidYMid meet",
-            onclick: on_bg_click,
-
-            // Track background
-            rect {
-                x: CHART_PADDING_LEFT,
-                y: 18.0,
-                width: slider_width,
-                height: 6.0,
-                rx: 3.0,
-                fill: "#0f3460",
+        div { class: "zoom-slider",
+            div { class: "zoom-labels",
+                span { class: "zoom-date", "{left_date}" }
+                span { class: "zoom-date", "{right_date}" }
             }
-
-            // Active range
-            rect {
-                x: left_x,
-                y: 18.0,
-                width: (right_x - left_x).max(2.0),
-                height: 6.0,
-                fill: "#4A90D9",
-                rx: 3.0,
-            }
-
-            // Left handle
-            circle {
-                cx: left_x,
-                cy: 21.0,
-                r: 8.0,
-                fill: "#4A90D9",
-                stroke: "#fff",
-                stroke_width: 1.5,
-                cursor: "ew-resize",
-            }
-            text {
-                x: left_x,
-                y: 42.0,
-                text_anchor: "middle",
-                font_size: "9px",
-                fill: "#888",
-                {left_date.to_string()}
-            }
-
-            // Right handle
-            circle {
-                cx: right_x,
-                cy: 21.0,
-                r: 8.0,
-                fill: "#4A90D9",
-                stroke: "#fff",
-                stroke_width: 1.5,
-                cursor: "ew-resize",
-            }
-            text {
-                x: right_x,
-                y: 42.0,
-                text_anchor: "middle",
-                font_size: "9px",
-                fill: "#888",
-                {right_date.to_string()}
+            div { class: "zoom-inputs",
+                input {
+                    r#type: "range",
+                    class: "zoom-range zoom-range-left",
+                    min: data_min as f64,
+                    max: data_max as f64,
+                    value: zoom_min as f64,
+                    oninput: on_left_change,
+                }
+                input {
+                    r#type: "range",
+                    class: "zoom-range zoom-range-right",
+                    min: data_min as f64,
+                    max: data_max as f64,
+                    value: zoom_max as f64,
+                    oninput: on_right_change,
+                }
             }
         }
     }
@@ -1323,7 +1272,18 @@ Add to `ledger-graph-ui/src/components/mod.rs`:
 pub mod analytics_chart;
 ```
 
-- [ ] **Step 3: Add chart CSS**
+- [ ] **Step 3: Add web-sys, js-sys, wasm-bindgen to Cargo.toml**
+
+Add to `ledger-graph-ui/Cargo.toml` (needed by Task 7's CSV download):
+
+```toml
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "Url", "HtmlAnchorElement", "HtmlElement", "Document", "Window"] }
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+```
+
+- [ ] **Step 4: Add chart CSS**
 
 Append to `ledger-graph-ui/assets/main.css`:
 
@@ -1352,22 +1312,66 @@ Append to `ledger-graph-ui/assets/main.css`:
 }
 
 .zoom-slider {
-    width: 100%;
-    height: 50px;
+    padding: 4px 8px;
     flex-shrink: 0;
+}
+
+.zoom-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 2px;
+}
+
+.zoom-inputs {
+    position: relative;
+    height: 24px;
+}
+
+.zoom-range {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    pointer-events: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 24px;
+}
+
+.zoom-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #4A90D9;
+    border: 2px solid #fff;
+    cursor: ew-resize;
+}
+
+.zoom-range::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #0f3460;
+    border-radius: 2px;
+}
+
+.zoom-range-right::-webkit-slider-runnable-track {
+    background: transparent;
 }
 ```
 
-- [ ] **Step 4: Verify it compiles**
+- [ ] **Step 5: Verify it compiles**
 
 Run: `cargo check -p ledger-graph-ui`
 Expected: compiles
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add ledger-graph-ui/src/components/analytics_chart.rs ledger-graph-ui/src/components/mod.rs ledger-graph-ui/assets/main.css
-git commit -m "feat: add SVG line chart component with day bands and zoom slider"
+git add ledger-graph-ui/src/components/analytics_chart.rs ledger-graph-ui/src/components/mod.rs ledger-graph-ui/Cargo.toml ledger-graph-ui/assets/main.css
+git commit -m "feat: add SVG line chart component with day bands, zoom slider, and web-sys dep"
 ```
 
 ---
@@ -1425,42 +1429,7 @@ pub fn Analytics() -> Element {
         } else {
             active.insert(label.clone());
             drop(active);
-
-            // Fetch offset dates if not yet loaded
-            if !*dates_loaded.read() {
-                dates_loaded.set(true);
-                spawn(async move {
-                    match get_offset_dates().await {
-                        Ok(dates) => offset_dates.set(dates),
-                        Err(e) => tracing::error!("Failed to load offset dates: {e}"),
-                    }
-                });
-            }
-
-            // Fetch query data
-            let query = saved_queries
-                .read()
-                .iter()
-                .find(|q| q.label == label)
-                .cloned();
-            if let Some(q) = query {
-                loading_queries.write().insert(label.clone());
-                query_errors.write().remove(&label);
-                let label_done = label.clone();
-                spawn(async move {
-                    match run_analytics_query(q.cypher, q.min_time, q.max_time).await {
-                        Ok(data) => {
-                            query_results.write().insert(label_done.clone(), data);
-                        }
-                        Err(e) => {
-                            query_errors
-                                .write()
-                                .insert(label_done.clone(), format!("{e}"));
-                        }
-                    }
-                    loading_queries.write().remove(&label_done);
-                });
-            }
+            activate_query(label);
         }
     };
 
@@ -1480,6 +1449,46 @@ pub fn Analytics() -> Element {
         });
     };
 
+    // Helper: activate a query by label (fetch data, update signals).
+    // Extracted so it can be called from both on_toggle and on_save.
+    let activate_query = move |label: String| {
+        // Fetch offset dates if not yet loaded
+        if !*dates_loaded.read() {
+            dates_loaded.set(true);
+            spawn(async move {
+                match get_offset_dates().await {
+                    Ok(dates) => offset_dates.set(dates),
+                    Err(e) => tracing::error!("Failed to load offset dates: {e}"),
+                }
+            });
+        }
+
+        // Fetch query data
+        let query = saved_queries
+            .read()
+            .iter()
+            .find(|q| q.label == label)
+            .cloned();
+        if let Some(q) = query {
+            loading_queries.write().insert(label.clone());
+            query_errors.write().remove(&label);
+            let label_done = label.clone();
+            spawn(async move {
+                match run_analytics_query(q.cypher, q.min_time, q.max_time).await {
+                    Ok(data) => {
+                        query_results.write().insert(label_done.clone(), data);
+                    }
+                    Err(e) => {
+                        query_errors
+                            .write()
+                            .insert(label_done.clone(), format!("{e}"));
+                    }
+                }
+                loading_queries.write().remove(&label_done);
+            });
+        }
+    };
+
     let on_save = move |(label, cypher, min_time, max_time): (
         String,
         String,
@@ -1487,15 +1496,12 @@ pub fn Analytics() -> Element {
         Option<String>,
     )| {
         let label_clone = label.clone();
-        let cypher_clone = cypher.clone();
-        let min_clone = min_time.clone();
-        let max_clone = max_time.clone();
         spawn(async move {
             match save_analytics_query(
                 label_clone.clone(),
-                cypher_clone,
-                min_clone.clone(),
-                max_clone.clone(),
+                cypher.clone(),
+                min_time.clone(),
+                max_time.clone(),
             )
             .await
             {
@@ -1505,8 +1511,24 @@ pub fn Analytics() -> Element {
                         Ok(queries) => saved_queries.set(queries),
                         Err(e) => tracing::error!("Failed to reload queries: {e}"),
                     }
-                    // Auto-activate
-                    on_toggle(label_clone);
+                    // Auto-activate: insert into active set and trigger fetch
+                    active_queries.write().insert(label_clone.clone());
+                    // Fetch the new query's data directly (same logic as activate_query)
+                    let q_cypher = cypher.clone();
+                    let q_min = min_time.clone();
+                    let q_max = max_time.clone();
+                    loading_queries.write().insert(label_clone.clone());
+                    match run_analytics_query(q_cypher, q_min, q_max).await {
+                        Ok(data) => {
+                            query_results.write().insert(label_clone.clone(), data);
+                        }
+                        Err(e) => {
+                            query_errors
+                                .write()
+                                .insert(label_clone.clone(), format!("{e}"));
+                        }
+                    }
+                    loading_queries.write().remove(&label_clone);
                 }
                 Err(e) => {
                     query_errors
@@ -1889,24 +1911,12 @@ git commit -m "feat: add analytics tab with chart, query panel, controls, and CS
 
 ---
 
-### Task 8: Add web-sys dependency and update .gitignore
+### Task 8: Update .gitignore
 
 **Files:**
-- Modify: `ledger-graph-ui/Cargo.toml`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Add web-sys and js-sys to Cargo.toml**
-
-Add to `[dependencies]` in `ledger-graph-ui/Cargo.toml`:
-
-```toml
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "Url", "HtmlAnchorElement", "HtmlElement", "Document", "Window"] }
-js-sys = "0.3"
-wasm-bindgen = "0.2"
-```
-
-- [ ] **Step 2: Add analytics-queries.local.toml to .gitignore**
+- [ ] **Step 1: Add analytics-queries.local.toml to .gitignore**
 
 Add to `.gitignore`:
 
@@ -1914,16 +1924,11 @@ Add to `.gitignore`:
 analytics-queries.local.toml
 ```
 
-- [ ] **Step 3: Verify it compiles**
-
-Run: `cargo check -p ledger-graph-ui`
-Expected: compiles
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add ledger-graph-ui/Cargo.toml .gitignore
-git commit -m "feat: add web-sys dependency for CSV export, gitignore local queries"
+git add .gitignore
+git commit -m "chore: gitignore analytics-queries.local.toml"
 ```
 
 ---
@@ -1993,8 +1998,9 @@ git commit -m "feat: analytics tab integration verified"
 - [x] Two-handle zoom slider (Task 6)
 - [x] Main analytics component: state, fetching, wiring (Task 7)
 - [x] Right panel: Refresh, Reset Zoom, Download CSV, Legend (Task 7)
-- [x] CSV export via web-sys blob (Task 7, Task 8)
+- [x] CSV export via web-sys blob (Task 6 dep + Task 7 impl)
 - [x] .gitignore for local queries (Task 8)
+- [ ] Hover tooltip (deferred — see Follow-up Items)
 - [x] Color stability by saved_queries position (Task 5 `color_for_index`, used in Task 6 + Task 7)
 - [x] Per-query loading/error state (Task 5 + Task 7)
 - [x] Zoom preserved on toggle (Task 7 — zoom_range is independent signal)
@@ -2004,3 +2010,10 @@ git commit -m "feat: analytics tab integration verified"
 **Placeholder scan:** No TBDs, TODOs, or "similar to" references found. All steps have complete code.
 
 **Type consistency:** `AnalyticsQuery` struct consistent across Task 1 (definition), Task 2 (server usage), Task 5 (component props), Task 7 (analytics state). `color_for_index` defined in Task 5, used in Task 6 and Task 7. Server function names consistent across Task 2/3 (definition) and Task 7 (imports).
+
+---
+
+## Follow-up Items (not in scope for this plan)
+
+- **Hover tooltip**: The spec calls for a tooltip showing offset, date, value, query label on mouseover near a data point. This requires SVG mouse position → nearest-point search logic which adds significant complexity. Deferred to a follow-up task.
+- **Zoom slider drag interaction**: The current HTML range input approach works but isn't as polished as a custom SVG drag. Can be refined in a follow-up if needed.
