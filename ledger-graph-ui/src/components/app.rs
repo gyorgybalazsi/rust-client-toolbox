@@ -9,6 +9,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
+#[derive(Clone, Copy, PartialEq)]
+enum ActiveTab {
+    Graph,
+    Analytics,
+}
+
 /// Given full graph data, compute which node indices belong to each transaction's
 /// subtree (BFS via ACTION/CONSEQUENCE edges from transaction root).
 fn compute_tx_subtrees(data: &GraphData) -> Vec<(usize, Vec<usize>)> {
@@ -125,6 +131,7 @@ pub fn App() -> Element {
     let mut graph = use_signal(GraphData::default);
     let viewport = use_signal(Viewport::default);
     let mut selection = use_signal(Selection::default);
+    let mut active_tab = use_signal(|| ActiveTab::Graph);
 
     // Replay state
     let mut full_data = use_signal(GraphData::default);
@@ -231,27 +238,48 @@ pub fn App() -> Element {
                     Toolbar { viewport }
                 }
             }
-            div { class: "main-content",
-                div { class: "left-panel",
-                    QueryEditor {
-                        on_result: on_result,
-                        on_replay: on_replay,
-                        on_step_start: on_step_start,
-                        on_step_next: on_step_next,
-                        is_stepping: is_replaying && !*auto_replay.read(),
+            div { class: "tab-bar",
+                button {
+                    class: if *active_tab.read() == ActiveTab::Graph { "tab-btn active" } else { "tab-btn" },
+                    onclick: move |_| active_tab.set(ActiveTab::Graph),
+                    "Graph"
+                }
+                button {
+                    class: if *active_tab.read() == ActiveTab::Analytics { "tab-btn active" } else { "tab-btn" },
+                    onclick: move |_| active_tab.set(ActiveTab::Analytics),
+                    "Analytics"
+                }
+            }
+            if *active_tab.read() == ActiveTab::Graph {
+                div { class: "main-content",
+                    div { class: "left-panel",
+                        QueryEditor {
+                            on_result: on_result,
+                            on_replay: on_replay,
+                            on_step_start: on_step_start,
+                            on_step_next: on_step_next,
+                            is_stepping: is_replaying && !*auto_replay.read(),
+                        }
+                    }
+                    div { class: "center-panel",
+                        GraphCanvas {
+                            graph: graph.read().clone(),
+                            viewport,
+                            selection,
+                        }
+                    }
+                    div { class: "right-panel",
+                        Sidebar {
+                            graph: graph.read().clone(),
+                            selection,
+                        }
                     }
                 }
-                div { class: "center-panel",
-                    GraphCanvas {
-                        graph: graph.read().clone(),
-                        viewport,
-                        selection,
-                    }
-                }
-                div { class: "right-panel",
-                    Sidebar {
-                        graph: graph.read().clone(),
-                        selection,
+            }
+            if *active_tab.read() == ActiveTab::Analytics {
+                div { class: "main-content",
+                    div { class: "center-panel",
+                        p { "Analytics tab — coming soon" }
                     }
                 }
             }

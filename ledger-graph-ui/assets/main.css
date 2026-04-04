@@ -320,3 +320,34 @@ html, body {
 .graph-canvas:active {
     cursor: grabbing;
 }
+
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    gap: 0;
+    background: #16213e;
+    border-bottom: 2px solid #0f3460;
+    padding: 0 16px;
+}
+
+.tab-btn {
+    padding: 8px 20px;
+    background: transparent;
+    color: #888;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn:hover {
+    color: #ccc;
+}
+
+.tab-btn.active {
+    color: #4A90D9;
+    border-bottom: 2px solid #4A90D9;
+}
