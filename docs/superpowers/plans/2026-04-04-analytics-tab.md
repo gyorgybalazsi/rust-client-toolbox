@@ -1191,7 +1191,7 @@ fn ZoomSlider(
         .unwrap_or_default();
 
     let on_left_change = {
-        move |evt: FormEvent| {
+        move |evt| {
             if let Ok(val) = evt.value().parse::<i64>() {
                 let clamped = val.min(zoom_max - 1);
                 on_change.call((clamped, zoom_max));
@@ -1200,7 +1200,7 @@ fn ZoomSlider(
     };
 
     let on_right_change = {
-        move |evt: FormEvent| {
+        move |evt| {
             if let Ok(val) = evt.value().parse::<i64>() {
                 let clamped = val.max(zoom_min + 1);
                 on_change.call((zoom_min, clamped));
@@ -1418,39 +1418,8 @@ pub fn Analytics() -> Element {
         }
     });
 
-    let on_toggle = move |label: String| {
-        let mut active = active_queries.write();
-        if active.contains(&label) {
-            active.remove(&label);
-            drop(active);
-            // Remove cached results
-            query_results.write().remove(&label);
-            query_errors.write().remove(&label);
-        } else {
-            active.insert(label.clone());
-            drop(active);
-            activate_query(label);
-        }
-    };
-
-    let on_delete = move |label: String| {
-        let label_clone = label.clone();
-        spawn(async move {
-            match delete_analytics_query(label_clone.clone()).await {
-                Ok(()) => {
-                    // Remove from saved, active, results
-                    saved_queries.write().retain(|q| q.label != label_clone);
-                    active_queries.write().remove(&label_clone);
-                    query_results.write().remove(&label_clone);
-                    query_errors.write().remove(&label_clone);
-                }
-                Err(e) => tracing::error!("Failed to delete query: {e}"),
-            }
-        });
-    };
-
     // Helper: activate a query by label (fetch data, update signals).
-    // Extracted so it can be called from both on_toggle and on_save.
+    // Defined before on_toggle and on_save which both use it.
     let activate_query = move |label: String| {
         // Fetch offset dates if not yet loaded
         if !*dates_loaded.read() {
@@ -1489,6 +1458,36 @@ pub fn Analytics() -> Element {
         }
     };
 
+    let on_toggle = move |label: String| {
+        let mut active = active_queries.write();
+        if active.contains(&label) {
+            active.remove(&label);
+            drop(active);
+            // Remove cached results
+            query_results.write().remove(&label);
+            query_errors.write().remove(&label);
+        } else {
+            active.insert(label.clone());
+            drop(active);
+            activate_query(label);
+        }
+    };
+
+    let on_delete = move |label: String| {
+        let label_clone = label.clone();
+        spawn(async move {
+            match delete_analytics_query(label_clone.clone()).await {
+                Ok(()) => {
+                    saved_queries.write().retain(|q| q.label != label_clone);
+                    active_queries.write().remove(&label_clone);
+                    query_results.write().remove(&label_clone);
+                    query_errors.write().remove(&label_clone);
+                }
+                Err(e) => tracing::error!("Failed to delete query: {e}"),
+            }
+        });
+    };
+
     let on_save = move |(label, cypher, min_time, max_time): (
         String,
         String,
@@ -1513,6 +1512,13 @@ pub fn Analytics() -> Element {
                     }
                     // Auto-activate: insert into active set and trigger fetch
                     active_queries.write().insert(label_clone.clone());
+                    // Ensure offset dates are loaded
+                    if !*dates_loaded.read() {
+                        dates_loaded.set(true);
+                        if let Ok(dates) = get_offset_dates().await {
+                            offset_dates.set(dates);
+                        }
+                    }
                     // Fetch the new query's data directly (same logic as activate_query)
                     let q_cypher = cypher.clone();
                     let q_min = min_time.clone();
@@ -1734,6 +1740,7 @@ fn build_csv(
 fn download_csv(csv: &str) {
     #[cfg(target_arch = "wasm32")]
     {
+        use wasm_bindgen::JsCast;
         use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
