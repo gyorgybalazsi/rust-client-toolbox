@@ -10,3 +10,6 @@ plans
 .claude/
 .tokensave/
 .superpowers/
+analytics-queries.local.toml
+docs/
+.codegraph/
