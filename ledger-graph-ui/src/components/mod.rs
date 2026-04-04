@@ -1,3 +1,4 @@
+pub mod analytics_queries;
 pub mod app;
 pub mod graph_canvas;
 pub mod graph_edge;

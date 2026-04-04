@@ -351,3 +351,174 @@ html, body {
     color: #4A90D9;
     border-bottom: 2px solid #4A90D9;
 }
+
+/* Analytics Queries Panel */
+.analytics-queries {
+    padding: 12px;
+}
+
+.analytics-queries h3 {
+    font-size: 17px;
+    margin-bottom: 10px;
+    color: #4A90D9;
+}
+
+.query-toggle {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s;
+}
+
+.query-toggle:hover {
+    background: #1a4a8e;
+}
+
+.query-toggle.active {
+    background: #1a3a6e;
+}
+
+.query-toggle-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.query-label {
+    font-size: 13px;
+    color: #e0e0e0;
+    flex: 1;
+}
+
+.shared-badge {
+    font-size: 9px;
+    color: #888;
+    background: #0a1a3e;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.query-spinner {
+    color: #4A90D9;
+    font-size: 12px;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.query-error-indicator {
+    color: #E74C3C;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: help;
+}
+
+.query-time-range {
+    font-size: 10px;
+    color: #666;
+    margin-top: 2px;
+}
+
+.query-delete-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.query-toggle:hover .query-delete-btn {
+    opacity: 1;
+}
+
+.query-delete-btn:hover {
+    color: #E74C3C;
+}
+
+.add-query-btn {
+    width: 100%;
+    padding: 6px;
+    margin-top: 8px;
+    background: #0f3460;
+    color: #888;
+    border: 1px dashed #333;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.add-query-btn:hover {
+    color: #ccc;
+    border-color: #4A90D9;
+}
+
+.add-query-form {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.query-form-input {
+    background: #0a1a3e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 12px;
+}
+
+.query-form-textarea {
+    background: #0a1a3e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-family: monospace;
+    resize: vertical;
+}
+
+.query-form-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #888;
+}
+
+.query-form-time input {
+    flex: 1;
+    color-scheme: dark;
+}
+
+.query-form-save, .query-form-cancel {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.query-form-save {
+    background: #4A90D9;
+    color: white;
+}
+
+.query-form-cancel {
+    background: #333;
+    color: #aaa;
+}
