@@ -1,4 +1,5 @@
 use crate::models::analytics::AnalyticsQuery;
+use crate::server::analytics::get_template_names;
 use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -79,6 +80,9 @@ pub fn AnalyticsQueriesPanel(
                 }
             }
 
+            // Template ACS dropdown
+            TemplateAcsDropdown { on_save: on_save }
+
             if *show_form.read() {
                 div { class: "add-query-form",
                     input {
@@ -148,6 +152,72 @@ pub fn AnalyticsQueriesPanel(
                     class: "add-query-btn",
                     onclick: move |_| show_form.set(true),
                     "+ Add Query"
+                }
+            }
+        }
+    }
+}
+
+fn acs_cypher_for_template(template: &str) -> String {
+    format!(
+        "MATCH (t:Transaction) WITH t.offset AS offset ORDER BY offset \
+         CALL {{ WITH offset \
+         MATCH (t2:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(c:Created) \
+         WHERE t2.offset <= offset AND c.template_name = '{}' \
+         WITH c WHERE NOT EXISTS {{ \
+         MATCH (t3:Transaction)-[:ACTION]->(e2)-[:CONSEQUENCE*0..]->(x:Exercised)-[:CONSUMES]->(c) \
+         WHERE t3.offset <= offset }} \
+         RETURN count(DISTINCT c) AS acs }} \
+         RETURN offset, acs AS value ORDER BY offset",
+        template.replace('\'', "\\'")
+    )
+}
+
+#[component]
+fn TemplateAcsDropdown(
+    on_save: EventHandler<(String, String, Option<String>, Option<String>)>,
+) -> Element {
+    let mut templates: Signal<Vec<String>> = use_signal(Vec::new);
+    let mut selected = use_signal(String::new);
+
+    // Fetch template names on mount
+    let _load = use_future(move || async move {
+        match get_template_names().await {
+            Ok(names) => templates.set(names),
+            Err(e) => tracing::error!("Failed to load template names: {e}"),
+        }
+    });
+
+    let on_select = move |evt: Event<FormData>| {
+        let template = evt.value();
+        if template.is_empty() {
+            return;
+        }
+        selected.set(template.clone());
+        let short_name = template.rsplit('.').next().unwrap_or(&template);
+        let label = format!("ACS: {short_name}");
+        let cypher = acs_cypher_for_template(&template);
+        // Use on_save which reloads queries, saves to local file, and auto-activates
+        on_save.call((label, cypher, None, None));
+    };
+
+    let tmpl_list = templates.read();
+
+    rsx! {
+        div { class: "template-acs-section",
+            h4 { "ACS by Template" }
+            select {
+                class: "template-select",
+                value: "{selected}",
+                oninput: on_select,
+                option { value: "", "Select template..." }
+                for tmpl in tmpl_list.iter() {
+                    {
+                        let short = tmpl.rsplit('.').next().unwrap_or(tmpl);
+                        rsx! {
+                            option { value: "{tmpl}", "{short}" }
+                        }
+                    }
                 }
             }
         }

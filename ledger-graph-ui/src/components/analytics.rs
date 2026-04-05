@@ -226,7 +226,93 @@ pub fn Analytics() -> Element {
             }
         }
         div { class: "analytics-right-panel",
-            h3 { "Controls" }
+            h3 { "Date Range" }
+            {
+                let dates = offset_dates.read().clone();
+                let unique_dates: Vec<String> = {
+                    let mut d: Vec<String> = dates.iter()
+                        .map(|(_, s)| s[..10.min(s.len())].to_string())
+                        .collect();
+                    d.dedup();
+                    d
+                };
+                let min_date = unique_dates.first().cloned().unwrap_or_default();
+                let max_date = unique_dates.last().cloned().unwrap_or_default();
+                let from_date = dates.iter()
+                    .find(|(o, _)| zoom.map_or(true, |(min, _)| *o >= min))
+                    .map(|(_, d)| d[..10.min(d.len())].to_string())
+                    .unwrap_or_default();
+                let to_date = dates.iter().rev()
+                    .find(|(o, _)| zoom.map_or(true, |(_, max)| *o <= max))
+                    .map(|(_, d)| d[..10.min(d.len())].to_string())
+                    .unwrap_or_default();
+                let min_date2 = min_date.clone();
+                let max_date2 = max_date.clone();
+                let dates_for_from = dates.clone();
+                let dates_for_to = dates.clone();
+                let to_date_for_from = to_date.clone();
+                let from_date_for_to = from_date.clone();
+
+                let on_from_change = move |evt: Event<FormData>| {
+                    let selected = evt.value();
+                    if selected.is_empty() { return; }
+                    // Find first offset on or after selected date
+                    let min_off = dates_for_from.iter()
+                        .find(|(_, d)| &d[..10.min(d.len())] >= selected.as_str())
+                        .map(|(o, _)| *o);
+                    // Keep current "to" date's max offset
+                    let max_off = dates_for_from.iter().rev()
+                        .find(|(_, d)| &d[..10.min(d.len())] <= to_date_for_from.as_str())
+                        .map(|(o, _)| *o);
+                    if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
+                        zoom_range.set(Some((min_o, max_o)));
+                    }
+                };
+
+                let on_to_change = move |evt: Event<FormData>| {
+                    let selected = evt.value();
+                    if selected.is_empty() { return; }
+                    // Keep current "from" date's min offset
+                    let min_off = dates_for_to.iter()
+                        .find(|(_, d)| &d[..10.min(d.len())] >= from_date_for_to.as_str())
+                        .map(|(o, _)| *o);
+                    // Find last offset on or before selected date
+                    let max_off = dates_for_to.iter().rev()
+                        .find(|(_, d)| &d[..10.min(d.len())] <= selected.as_str())
+                        .map(|(o, _)| *o);
+                    if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
+                        zoom_range.set(Some((min_o, max_o)));
+                    }
+                };
+
+                rsx! {
+                    div { class: "zoom-slider",
+                        div { class: "zoom-row",
+                            span { class: "zoom-label", "From:" }
+                            input {
+                                r#type: "date",
+                                class: "zoom-date-input",
+                                min: min_date,
+                                max: max_date,
+                                value: from_date,
+                                oninput: on_from_change,
+                            }
+                        }
+                        div { class: "zoom-row",
+                            span { class: "zoom-label", "To:" }
+                            input {
+                                r#type: "date",
+                                class: "zoom-date-input",
+                                min: min_date2,
+                                max: max_date2,
+                                value: to_date,
+                                oninput: on_to_change,
+                            }
+                        }
+                    }
+                }
+            }
+            h3 { "Actions" }
             div { class: "analytics-buttons",
                 button { class: "analytics-btn", onclick: on_refresh, "Refresh" }
                 button { class: "analytics-btn", onclick: on_reset_zoom, "Reset Zoom" }

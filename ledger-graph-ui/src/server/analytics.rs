@@ -54,7 +54,7 @@ pub async fn load_analytics_queries() -> Result<Vec<AnalyticsQuery>, ServerFnErr
 }
 
 /// Save a new query to the local TOML file.
-/// Validates shape by running the query with LIMIT 10 via subquery wrapper.
+/// Validates shape by running a limited version of the query.
 #[server]
 pub async fn save_analytics_query(
     label: String,
@@ -63,13 +63,25 @@ pub async fn save_analytics_query(
     max_time: Option<String>,
 ) -> Result<(), ServerFnError> {
     let pool = super::neo4j_pool::pool();
+
+    // Try wrapping in CALL first; if that fails (e.g. nested CALL), run raw with LIMIT
     let validation_cypher = format!(
         "CALL {{ {cypher} }} WITH offset, value LIMIT 10"
     );
-    let mut result = pool
+    let validation_result = pool
         .execute(neo4rs::query(&validation_cypher))
-        .await
-        .map_err(|e| ServerFnError::new(format!("Query validation failed: {e}")))?;
+        .await;
+
+    let mut result = match validation_result {
+        Ok(r) => r,
+        Err(_) => {
+            // Fallback: run the query directly (it may already have ORDER BY, append LIMIT)
+            let fallback = format!("{cypher} LIMIT 10");
+            pool.execute(neo4rs::query(&fallback))
+                .await
+                .map_err(|e| ServerFnError::new(format!("Query validation failed: {e}")))?
+        }
+    };
 
     if let Some(row) = result.next().await.map_err(|e| {
         ServerFnError::new(format!("Failed to read validation result: {e}"))
@@ -79,13 +91,15 @@ pub async fn save_analytics_query(
                 "Column 'offset' must be integer. Got error: {e}"
             ))
         })?;
-        let _value: f64 = row.get::<f64>("value").or_else(|_| {
-            row.get::<i64>("value").map(|v| v as f64)
-        }).map_err(|e| {
-            ServerFnError::new(format!(
-                "Column 'value' must be numeric. Got error: {e}"
-            ))
-        })?;
+        let _value: f64 = row
+            .get::<i64>("value")
+            .map(|v| v as f64)
+            .or_else(|_| row.get::<f64>("value"))
+            .map_err(|e| {
+                ServerFnError::new(format!(
+                    "Column 'value' must be numeric. Got error: {e}"
+                ))
+            })?;
     }
 
     let mut local = load_queries_from_file(LOCAL_QUERIES_PATH, false);
@@ -175,9 +189,11 @@ pub async fn run_analytics_query(
             Ok(v) => v,
             Err(_) => continue,
         };
+        // Neo4j count() returns i64. Try i64 first, then f64.
         let value: f64 = row
-            .get::<f64>("value")
-            .or_else(|_| row.get::<i64>("value").map(|v| v as f64))
+            .get::<i64>("value")
+            .map(|v| v as f64)
+            .or_else(|_| row.get::<f64>("value"))
             .unwrap_or(0.0);
         data.push((offset, value));
     }
@@ -220,4 +236,28 @@ pub async fn get_offset_dates() -> Result<Vec<(i64, String)>, ServerFnError> {
     }
 
     Ok(dates)
+}
+
+/// Fetch all distinct template names from Created nodes.
+#[server]
+pub async fn get_template_names() -> Result<Vec<String>, ServerFnError> {
+    let pool = super::neo4j_pool::pool();
+    let query = neo4rs::query(
+        "MATCH (c:Created) RETURN DISTINCT c.template_name AS template ORDER BY template"
+    );
+    let mut result = pool.execute(query).await.map_err(|e| {
+        ServerFnError::new(format!("Template names query failed: {e}"))
+    })?;
+
+    let mut names: Vec<String> = Vec::new();
+    while let Some(row) = result.next().await.map_err(|e| {
+        ServerFnError::new(format!("Failed to read template name row: {e}"))
+    })? {
+        let name: String = row.get("template").unwrap_or_default();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+
+    Ok(names)
 }

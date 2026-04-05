@@ -103,31 +103,48 @@ pub fn AnalyticsChart(
                 view_box: view_box,
                 preserve_aspect_ratio: "xMidYMid meet",
 
-                // Day bands
-                for (i, group) in day_groups.iter().enumerate() {
-                    {
-                        let x1 = plot_x(group.1, zoom_min, zoom_max);
-                        let x2 = plot_x(group.2, zoom_min, zoom_max);
-                        let fill = if i % 2 == 0 { "#1e2240" } else { "#1a1a2e" };
-                        let label_x = (x1 + x2) / 2.0;
-                        rsx! {
-                            rect {
-                                x: x1, y: CHART_PADDING_TOP,
-                                width: (x2 - x1).max(2.0),
-                                height: CHART_HEIGHT - CHART_PADDING_TOP - CHART_PADDING_BOTTOM,
-                                fill: fill,
-                            }
-                            if i > 0 {
-                                line {
-                                    x1: x1, y1: CHART_PADDING_TOP,
-                                    x2: x1, y2: CHART_HEIGHT - CHART_PADDING_BOTTOM,
-                                    stroke: "#555", stroke_width: 1.0, stroke_dasharray: "4,4",
+                // Day bands — compute boundaries as midpoints between adjacent days
+                {
+                    let chart_left = CHART_PADDING_LEFT;
+                    let chart_right = CHART_WIDTH - CHART_PADDING_RIGHT;
+                    let chart_top = CHART_PADDING_TOP;
+                    let chart_bottom = CHART_HEIGHT - CHART_PADDING_BOTTOM;
+
+                    // Compute boundary x-positions between consecutive day groups
+                    let mut boundaries: Vec<f64> = Vec::new();
+                    for i in 0..day_groups.len().saturating_sub(1) {
+                        let end_of_current = plot_x(day_groups[i].2, zoom_min, zoom_max);
+                        let start_of_next = plot_x(day_groups[i + 1].1, zoom_min, zoom_max);
+                        boundaries.push((end_of_current + start_of_next) / 2.0);
+                    }
+
+                    rsx! {
+                        for (i, group) in day_groups.iter().enumerate() {
+                            {
+                                let band_left = if i == 0 { chart_left } else { boundaries[i - 1] };
+                                let band_right = if i == day_groups.len() - 1 { chart_right } else { boundaries[i] };
+                                let fill = if i % 2 == 0 { "#1e2240" } else { "#1a1a2e" };
+                                let label_x = (band_left + band_right) / 2.0;
+                                rsx! {
+                                    rect {
+                                        x: band_left, y: chart_top,
+                                        width: band_right - band_left,
+                                        height: chart_bottom - chart_top,
+                                        fill: fill,
+                                    }
+                                    if i > 0 {
+                                        line {
+                                            x1: band_left, y1: chart_top,
+                                            x2: band_left, y2: chart_bottom,
+                                            stroke: "#555", stroke_width: 1.0, stroke_dasharray: "4,4",
+                                        }
+                                    }
+                                    text {
+                                        x: label_x, y: chart_bottom + 20.0,
+                                        text_anchor: "middle", font_size: "11px", fill: "#888",
+                                        {group.0.clone()}
+                                    }
                                 }
-                            }
-                            text {
-                                x: label_x, y: CHART_HEIGHT - CHART_PADDING_BOTTOM + 20.0,
-                                text_anchor: "middle", font_size: "11px", fill: "#888",
-                                {group.0.clone()}
                             }
                         }
                     }
@@ -158,6 +175,35 @@ pub fn AnalyticsChart(
                 line { x1: CHART_PADDING_LEFT, y1: CHART_PADDING_TOP, x2: CHART_PADDING_LEFT, y2: CHART_HEIGHT - CHART_PADDING_BOTTOM, stroke: "#555", stroke_width: 1.0 }
                 line { x1: CHART_PADDING_LEFT, y1: CHART_HEIGHT - CHART_PADDING_BOTTOM, x2: CHART_WIDTH - CHART_PADDING_RIGHT, y2: CHART_HEIGHT - CHART_PADDING_BOTTOM, stroke: "#555", stroke_width: 1.0 }
 
+                // Offset tick marks on x-axis
+                {
+                    let mut tick_offsets: Vec<i64> = series_points.iter()
+                        .flat_map(|(_, _, pts)| pts.iter().map(|(o, _)| *o))
+                        .collect();
+                    tick_offsets.sort();
+                    tick_offsets.dedup();
+                    rsx! {
+                        for off in tick_offsets.iter() {
+                            {
+                                let x = plot_x(*off, zoom_min, zoom_max);
+                                let y_base = CHART_HEIGHT - CHART_PADDING_BOTTOM;
+                                rsx! {
+                                    line {
+                                        x1: x, y1: y_base,
+                                        x2: x, y2: y_base + 4.0,
+                                        stroke: "#666", stroke_width: 1.0,
+                                    }
+                                    text {
+                                        x: x, y: y_base + 14.0,
+                                        text_anchor: "middle", font_size: "9px", fill: "#888",
+                                        {off.to_string()}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Data series
                 for (idx, _label, points) in series_points.iter() {
                     {
@@ -173,6 +219,16 @@ pub fn AnalyticsChart(
                             .join(" ");
                         rsx! {
                             polyline { points: polyline_points, fill: "none", stroke: color, stroke_width: 2.0 }
+                            // Dots at each data point
+                            for (o, v) in points.iter() {
+                                {
+                                    let cx = plot_x(*o, zoom_min, zoom_max);
+                                    let cy = plot_y(*v, y_max);
+                                    rsx! {
+                                        circle { cx: cx, cy: cy, r: 3.5, fill: color, stroke: "#1a1a2e", stroke_width: 1.5 }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -199,14 +255,31 @@ pub fn AnalyticsChart(
                 }
             }
 
-            // Zoom slider
-            ZoomSlider {
-                data_min, data_max, zoom_min, zoom_max,
-                offset_dates: offset_dates.clone(),
-                on_change: on_zoom_change,
-            }
         }
     }
+}
+
+/// Find the min offset whose date >= given date string (YYYY-MM-DD)
+fn first_offset_on_or_after(offset_dates: &[(i64, String)], date: &str) -> Option<i64> {
+    offset_dates.iter()
+        .find(|(_, d)| &d[..10.min(d.len())] >= date)
+        .map(|(o, _)| *o)
+}
+
+/// Find the max offset whose date <= given date string (YYYY-MM-DD)
+fn last_offset_on_or_before(offset_dates: &[(i64, String)], date: &str) -> Option<i64> {
+    offset_dates.iter().rev()
+        .find(|(_, d)| &d[..10.min(d.len())] <= date)
+        .map(|(o, _)| *o)
+}
+
+/// Extract sorted unique dates from offset_dates
+fn unique_dates(offset_dates: &[(i64, String)]) -> Vec<String> {
+    let mut dates: Vec<String> = offset_dates.iter()
+        .map(|(_, d)| d[..10.min(d.len())].to_string())
+        .collect();
+    dates.dedup();
+    dates
 }
 
 #[component]
@@ -215,49 +288,65 @@ fn ZoomSlider(
     offset_dates: Vec<(i64, String)>,
     on_change: EventHandler<(i64, i64)>,
 ) -> Element {
-    let left_date = offset_dates.iter()
+    let dates = unique_dates(&offset_dates);
+
+    // Current date values for the inputs
+    let from_date = offset_dates.iter()
         .find(|(o, _)| *o >= zoom_min)
         .map(|(_, d)| d[..10.min(d.len())].to_string())
         .unwrap_or_default();
-    let right_date = offset_dates.iter().rev()
+    let to_date = offset_dates.iter().rev()
         .find(|(o, _)| *o <= zoom_max)
         .map(|(_, d)| d[..10.min(d.len())].to_string())
         .unwrap_or_default();
 
-    let on_left_change = move |evt: Event<FormData>| {
-        if let Ok(val) = evt.value().parse::<i64>() {
-            let clamped = val.min(zoom_max - 1);
-            on_change.call((clamped, zoom_max));
+    let min_date = dates.first().cloned().unwrap_or_default();
+    let max_date = dates.last().cloned().unwrap_or_default();
+
+    let offset_dates_left = offset_dates.clone();
+    let offset_dates_right = offset_dates.clone();
+
+    let on_from_change = move |evt: Event<FormData>| {
+        let selected_date = evt.value();
+        if selected_date.is_empty() { return; }
+        if let Some(min_off) = first_offset_on_or_after(&offset_dates_left, &selected_date) {
+            on_change.call((min_off, zoom_max));
         }
     };
 
-    let on_right_change = move |evt: Event<FormData>| {
-        if let Ok(val) = evt.value().parse::<i64>() {
-            let clamped = val.max(zoom_min + 1);
-            on_change.call((zoom_min, clamped));
+    let on_to_change = move |evt: Event<FormData>| {
+        let selected_date = evt.value();
+        if selected_date.is_empty() { return; }
+        if let Some(max_off) = last_offset_on_or_before(&offset_dates_right, &selected_date) {
+            on_change.call((zoom_min, max_off));
         }
     };
+
+    let min_date2 = min_date.clone();
+    let max_date2 = max_date.clone();
 
     rsx! {
         div { class: "zoom-slider",
-            div { class: "zoom-labels",
-                span { class: "zoom-date", "{left_date}" }
-                span { class: "zoom-date", "{right_date}" }
-            }
-            div { class: "zoom-inputs",
+            div { class: "zoom-row",
+                span { class: "zoom-label", "From:" }
                 input {
-                    r#type: "range",
-                    class: "zoom-range zoom-range-left",
-                    min: data_min as f64, max: data_max as f64,
-                    value: zoom_min as f64,
-                    oninput: on_left_change,
+                    r#type: "date",
+                    class: "zoom-date-input",
+                    min: min_date,
+                    max: max_date,
+                    value: from_date,
+                    oninput: on_from_change,
                 }
+            }
+            div { class: "zoom-row",
+                span { class: "zoom-label", "To:" }
                 input {
-                    r#type: "range",
-                    class: "zoom-range zoom-range-right",
-                    min: data_min as f64, max: data_max as f64,
-                    value: zoom_max as f64,
-                    oninput: on_right_change,
+                    r#type: "date",
+                    class: "zoom-date-input",
+                    min: min_date2,
+                    max: max_date2,
+                    value: to_date,
+                    oninput: on_to_change,
                 }
             }
         }

@@ -1,11 +1,11 @@
 [[query]]
-label = "Transactions per offset"
-cypher = "MATCH (t:Transaction) RETURN t.offset AS offset, 1 AS value ORDER BY offset"
-
-[[query]]
 label = "Created per offset"
-cypher = "MATCH (t:Transaction)-[:ACTION]->(c:Created) RETURN t.offset AS offset, count(c) AS value ORDER BY offset"
+cypher = "MATCH (t:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(c:Created) RETURN t.offset AS offset, count(c) AS value ORDER BY offset"
 
 [[query]]
 label = "Exercised per offset"
-cypher = "MATCH (t:Transaction)-[:ACTION]->(e:Exercised) RETURN t.offset AS offset, count(e) AS value ORDER BY offset"
+cypher = "MATCH (t:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised) RETURN t.offset AS offset, count(x) AS value ORDER BY offset"
+
+[[query]]
+label = "Active Contract Set"
+cypher = "MATCH (t:Transaction) WITH t.offset AS offset ORDER BY offset CALL { WITH offset MATCH (t2:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(c:Created) WHERE t2.offset <= offset WITH c WHERE NOT EXISTS { MATCH (t3:Transaction)-[:ACTION]->(e2)-[:CONSEQUENCE*0..]->(x:Exercised)-[:CONSUMES]->(c) WHERE t3.offset <= offset } RETURN count(DISTINCT c) AS acs } RETURN offset, acs AS value ORDER BY offset"
