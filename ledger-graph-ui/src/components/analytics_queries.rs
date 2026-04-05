@@ -1,5 +1,5 @@
 use crate::models::analytics::AnalyticsQuery;
-use crate::server::analytics::get_template_names;
+use crate::server::analytics::{get_choice_names, get_template_names};
 use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -80,8 +80,9 @@ pub fn AnalyticsQueriesPanel(
                 }
             }
 
-            // Template ACS dropdown
+            // Template query builders
             TemplateAcsDropdown { on_save: on_save }
+            TemplateExercisesDropdown { on_save: on_save }
 
             if *show_form.read() {
                 div { class: "add-query-form",
@@ -216,6 +217,102 @@ fn TemplateAcsDropdown(
                         let short = tmpl.rsplit('.').next().unwrap_or(tmpl);
                         rsx! {
                             option { value: "{tmpl}", "{short}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn exercises_cypher_for_choice(template: &str, choice: &str) -> String {
+    format!(
+        "MATCH (t:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised)-[:TARGET]->(c:Created) \
+         WHERE c.template_name = '{}' AND x.choice_name = '{}' \
+         RETURN t.offset AS offset, count(x) AS value ORDER BY offset",
+        template.replace('\'', "\\'"),
+        choice.replace('\'', "\\'")
+    )
+}
+
+#[component]
+fn TemplateExercisesDropdown(
+    on_save: EventHandler<(String, String, Option<String>, Option<String>)>,
+) -> Element {
+    let mut templates: Signal<Vec<String>> = use_signal(Vec::new);
+    let mut choices: Signal<Vec<String>> = use_signal(Vec::new);
+    let mut selected_template = use_signal(String::new);
+    let mut selected_choice = use_signal(String::new);
+
+    let _load = use_future(move || async move {
+        match get_template_names().await {
+            Ok(names) => templates.set(names),
+            Err(e) => tracing::error!("Failed to load template names: {e}"),
+        }
+    });
+
+    let on_template_select = move |evt: Event<FormData>| {
+        let template = evt.value();
+        selected_template.set(template.clone());
+        selected_choice.set(String::new());
+        choices.set(Vec::new());
+        if template.is_empty() {
+            return;
+        }
+        // Fetch choices for this template
+        spawn(async move {
+            match get_choice_names(template).await {
+                Ok(names) => choices.set(names),
+                Err(e) => tracing::error!("Failed to load choice names: {e}"),
+            }
+        });
+    };
+
+    let on_choice_select = move |evt: Event<FormData>| {
+        let choice = evt.value();
+        if choice.is_empty() {
+            return;
+        }
+        selected_choice.set(choice.clone());
+        let template = selected_template.read().clone();
+        let short_tmpl = template.rsplit('.').next().unwrap_or(&template).to_string();
+        let label = format!("{short_tmpl}:{choice}");
+        let cypher = exercises_cypher_for_choice(&template, &choice);
+        on_save.call((label, cypher, None, None));
+    };
+
+    let tmpl_list = templates.read();
+    let choice_list = choices.read();
+    let has_template = !selected_template.read().is_empty();
+
+    rsx! {
+        div { class: "template-acs-section",
+            h4 { "Exercises by Choice" }
+            select {
+                class: "template-select",
+                value: "{selected_template}",
+                oninput: on_template_select,
+                option { value: "", "Select template..." }
+                for tmpl in tmpl_list.iter() {
+                    {
+                        let short = tmpl.rsplit('.').next().unwrap_or(tmpl);
+                        rsx! {
+                            option { value: "{tmpl}", "{short}" }
+                        }
+                    }
+                }
+            }
+            if has_template {
+                select {
+                    class: "template-select",
+                    value: "{selected_choice}",
+                    oninput: on_choice_select,
+                    option { value: "", "Select choice..." }
+                    for choice in choice_list.iter() {
+                        {
+                            rsx! {
+                                option { value: "{choice}", "{choice}" }
+                            }
                         }
                     }
                 }

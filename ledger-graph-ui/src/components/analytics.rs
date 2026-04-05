@@ -285,7 +285,38 @@ pub fn Analytics() -> Element {
                     }
                 };
 
+                let dates_for_24h = dates.clone();
+                let dates_for_168h = dates.clone();
+
+                // Compute cutoff by subtracting hours from the latest timestamp in data.
+                // Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" into seconds, subtract, format back.
+                let mut on_last_n_hours = move |dates_ref: Vec<(i64, String)>, hours: u64| {
+                    if let Some((_, latest)) = dates_ref.last() {
+                        if let Some(cutoff) = subtract_hours_from_iso(latest, hours) {
+                            let min_off = dates_ref.iter()
+                                .find(|(_, d)| d.as_str() >= cutoff.as_str())
+                                .map(|(o, _)| *o);
+                            let max_off = dates_ref.last().map(|(o, _)| *o);
+                            if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
+                                zoom_range.set(Some((min_o, max_o)));
+                            }
+                        }
+                    }
+                };
+
+                let on_last_24h = move |_| {
+                    on_last_n_hours(dates_for_24h.clone(), 24);
+                };
+
+                let on_last_168h = move |_| {
+                    on_last_n_hours(dates_for_168h.clone(), 168);
+                };
+
                 rsx! {
+                    div { class: "zoom-presets",
+                        button { class: "analytics-btn", onclick: on_last_24h, "Last 24 hours" }
+                        button { class: "analytics-btn", onclick: on_last_168h, "Last 168 hours" }
+                    }
                     div { class: "zoom-slider",
                         div { class: "zoom-row",
                             span { class: "zoom-label", "From:" }
@@ -355,6 +386,63 @@ pub fn Analytics() -> Element {
             }
         }
     }
+}
+
+/// Subtract N hours from an ISO 8601 timestamp "YYYY-MM-DDTHH:MM:SSZ".
+/// Returns None if parsing fails. Uses simple day/hour arithmetic (no leap seconds).
+fn subtract_hours_from_iso(iso: &str, hours: u64) -> Option<String> {
+    // Parse "2026-03-23T15:29:14Z"
+    if iso.len() < 19 { return None; }
+    let year: i64 = iso[0..4].parse().ok()?;
+    let month: i64 = iso[5..7].parse().ok()?;
+    let day: i64 = iso[8..10].parse().ok()?;
+    let hour: i64 = iso[11..13].parse().ok()?;
+    let min: i64 = iso[14..16].parse().ok()?;
+    let sec: i64 = iso[17..19].parse().ok()?;
+
+    // Convert to a simple epoch-like total hours, subtract, convert back
+    // Use a rough days-since-epoch approach
+    let days_in_month = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let is_leap = |y: i64| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+
+    let mut total_days: i64 = 0;
+    for y in 2000..year {
+        total_days += if is_leap(y) { 366 } else { 365 };
+    }
+    for m in 1..month {
+        total_days += days_in_month[m as usize] as i64;
+        if m == 2 && is_leap(year) { total_days += 1; }
+    }
+    total_days += day - 1;
+
+    let total_secs = total_days * 86400 + hour * 3600 + min * 60 + sec;
+    let new_secs = total_secs - (hours as i64) * 3600;
+
+    // Convert back
+    let mut remaining = new_secs;
+    let new_sec = remaining % 60; remaining /= 60;
+    let new_min = remaining % 60; remaining /= 60;
+    let new_hour = remaining % 24; remaining /= 24;
+
+    // remaining = days since 2000-01-01
+    let mut y = 2000i64;
+    loop {
+        let dy = if is_leap(y) { 366 } else { 365 };
+        if remaining < dy { break; }
+        remaining -= dy;
+        y += 1;
+    }
+    let mut m = 1i64;
+    loop {
+        let mut dm = days_in_month[m as usize] as i64;
+        if m == 2 && is_leap(y) { dm += 1; }
+        if remaining < dm { break; }
+        remaining -= dm;
+        m += 1;
+    }
+    let d = remaining + 1;
+
+    Some(format!("{y:04}-{m:02}-{d:02}T{new_hour:02}:{new_min:02}:{new_sec:02}Z"))
 }
 
 fn build_csv(

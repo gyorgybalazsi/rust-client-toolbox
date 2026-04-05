@@ -261,3 +261,29 @@ pub async fn get_template_names() -> Result<Vec<String>, ServerFnError> {
 
     Ok(names)
 }
+
+/// Fetch distinct choice names for a given template.
+#[server]
+pub async fn get_choice_names(template_name: String) -> Result<Vec<String>, ServerFnError> {
+    let pool = super::neo4j_pool::pool();
+    let query = neo4rs::query(
+        "MATCH (x:Exercised)-[:TARGET]->(c:Created) \
+         WHERE c.template_name = $template \
+         RETURN DISTINCT x.choice_name AS choice ORDER BY choice"
+    ).param("template", template_name.as_str());
+    let mut result = pool.execute(query).await.map_err(|e| {
+        ServerFnError::new(format!("Choice names query failed: {e}"))
+    })?;
+
+    let mut names: Vec<String> = Vec::new();
+    while let Some(row) = result.next().await.map_err(|e| {
+        ServerFnError::new(format!("Failed to read choice name row: {e}"))
+    })? {
+        let name: String = row.get("choice").unwrap_or_default();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+
+    Ok(names)
+}
