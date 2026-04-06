@@ -737,6 +737,10 @@ html, body {
     z-index: 10;
 }
 
+.mermaid-btn-row {
+    margin-bottom: 8px;
+}
+
 .nav-help {
     margin-top: 16px;
     padding-top: 12px;

@@ -116,6 +116,53 @@ pub fn QueryEditor(
                     "Query All"
                 }
             }
+            {
+                let mut tx_id = use_signal(String::new);
+                let mut tx_lookup = move |_| {
+                    let uid = tx_id.read().clone();
+                    if uid.is_empty() { return; }
+                    cypher.set(format!(
+                        "MATCH (t:Transaction {{update_id: '{uid}'}})\n\
+                         OPTIONAL MATCH (t)-[r1]->(e)\n\
+                         OPTIONAL MATCH (e)-[r2:CONSEQUENCE*0..]->(c)\n\
+                         OPTIONAL MATCH (p:Party)-[r3:REQUESTED]->(t)\n\
+                         RETURN t, r1, e, c, p, r3"
+                    ));
+                    // Auto-execute
+                    let query = cypher.read().clone();
+                    loading.set(true);
+                    error.set(None);
+                    spawn(async move {
+                        match run_cypher(query, HashMap::new(), min_offset, max_offset).await {
+                            Ok(data) => on_result.call(data),
+                            Err(e) => error.set(Some(format!("{e}"))),
+                        }
+                        loading.set(false);
+                    });
+                };
+                rsx! {
+                    div { class: "query-templates",
+                        h4 { "Transaction Lookup" }
+                        input {
+                            class: "cypher-input",
+                            r#type: "text",
+                            placeholder: "Enter update_id...",
+                            value: "{tx_id}",
+                            oninput: move |evt| tx_id.set(evt.value()),
+                            onkeydown: move |evt| {
+                                if evt.key() == Key::Enter {
+                                    tx_lookup(());
+                                }
+                            },
+                        }
+                        button {
+                            class: "template-btn",
+                            onclick: move |_| tx_lookup(()),
+                            "Lookup"
+                        }
+                    }
+                }
+            }
         }
     }
 }
