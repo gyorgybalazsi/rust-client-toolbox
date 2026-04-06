@@ -25,8 +25,6 @@ pub fn AnalyticsQueriesPanel(
     let mut show_form = use_signal(|| false);
     let mut new_label = use_signal(String::new);
     let mut new_cypher = use_signal(String::new);
-    let mut new_min_time = use_signal(String::new);
-    let mut new_max_time = use_signal(String::new);
 
     let active = active_queries.read();
     let loading = loading_queries.read();
@@ -61,9 +59,6 @@ pub fn AnalyticsQueriesPanel(
                                 if let Some(ref err) = error {
                                     span { class: "query-error-indicator", title: "{err}", "!" }
                                 }
-                            }
-                            if let (Some(min_t), Some(max_t)) = (&query.min_time, &query.max_time) {
-                                div { class: "query-time-range", "{min_t} - {max_t}" }
                             }
                             if !query.shared {
                                 button {
@@ -100,43 +95,15 @@ pub fn AnalyticsQueriesPanel(
                         value: "{new_cypher}",
                         oninput: move |evt| new_cypher.set(evt.value()),
                     }
-                    div { class: "query-form-time",
-                        label { "Min time:" }
-                        input {
-                            r#type: "datetime-local",
-                            class: "query-form-input",
-                            value: "{new_min_time}",
-                            oninput: move |evt| new_min_time.set(evt.value()),
-                        }
-                    }
-                    div { class: "query-form-time",
-                        label { "Max time:" }
-                        input {
-                            r#type: "datetime-local",
-                            class: "query-form-input",
-                            value: "{new_max_time}",
-                            oninput: move |evt| new_max_time.set(evt.value()),
-                        }
-                    }
                     button {
                         class: "query-form-save",
                         onclick: move |_| {
                             let label = new_label.read().clone();
                             let cypher = new_cypher.read().clone();
-                            let min_t = {
-                                let v = new_min_time.read().clone();
-                                if v.is_empty() { None } else { Some(v) }
-                            };
-                            let max_t = {
-                                let v = new_max_time.read().clone();
-                                if v.is_empty() { None } else { Some(v) }
-                            };
                             if !label.is_empty() && !cypher.is_empty() {
-                                on_save.call((label, cypher, min_t, max_t));
+                                on_save.call((label, cypher, None, None));
                                 new_label.set(String::new());
                                 new_cypher.set(String::new());
-                                new_min_time.set(String::new());
-                                new_max_time.set(String::new());
                                 show_form.set(false);
                             }
                         },
@@ -160,17 +127,26 @@ pub fn AnalyticsQueriesPanel(
 }
 
 fn acs_cypher_for_template(template: &str) -> String {
+    let t = template.replace('\'', "\\'");
     format!(
-        "MATCH (t:Transaction) WITH t.offset AS offset ORDER BY offset \
-         CALL {{ WITH offset \
-         MATCH (t2:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(c:Created) \
-         WHERE t2.offset <= offset AND c.template_name = '{}' \
-         WITH c WHERE NOT EXISTS {{ \
-         MATCH (t3:Transaction)-[:ACTION]->(e2)-[:CONSEQUENCE*0..]->(x:Exercised)-[:CONSUMES]->(c) \
-         WHERE t3.offset <= offset }} \
-         RETURN count(DISTINCT c) AS acs }} \
-         RETURN offset, acs AS value ORDER BY offset",
-        template.replace('\'', "\\'")
+        "OPTIONAL MATCH (cb:Created) \
+         WHERE (cb.offset = -1 OR (cb.offset >= 0 AND cb.offset < $min_off)) \
+         AND cb.template_name = '{t}' \
+         AND NOT EXISTS {{ MATCH (xb:Exercised)-[:CONSUMES]->(cb) WHERE xb.offset < $min_off }} \
+         WITH count(cb) AS baseline \
+         MATCH (tx:Transaction) WHERE tx.offset >= $min_off AND tx.offset <= $max_off \
+         WITH baseline, tx.offset AS offset ORDER BY offset \
+         OPTIONAL MATCH (c:Created) WHERE c.offset = offset AND c.template_name = '{t}' \
+         WITH baseline, offset, count(c) AS created \
+         OPTIONAL MATCH (x:Exercised)-[:CONSUMES]->(c2:Created) \
+         WHERE x.offset = offset AND c2.template_name = '{t}' \
+         WITH baseline, offset, created, count(x) AS consumed \
+         WITH baseline, offset, created - consumed AS delta ORDER BY offset \
+         WITH baseline, collect({{offset: offset, delta: delta}}) AS rows \
+         UNWIND range(0, size(rows)-1) AS i \
+         RETURN rows[i].offset AS offset, \
+         baseline + reduce(s=0, j IN range(0,i) | s + rows[j].delta) AS value \
+         ORDER BY offset"
     )
 }
 
@@ -227,7 +203,9 @@ fn TemplateAcsDropdown(
 
 fn exercises_cypher_for_choice(template: &str, choice: &str) -> String {
     format!(
-        "MATCH (t:Transaction)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised)-[:TARGET]->(c:Created) \
+        "MATCH (t:Transaction) WHERE t.offset >= $min_off AND t.offset <= $max_off \
+         WITH t \
+         MATCH (t)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised)-[:TARGET]->(c:Created) \
          WHERE c.template_name = '{}' AND x.choice_name = '{}' \
          RETURN t.offset AS offset, count(x) AS value ORDER BY offset",
         template.replace('\'', "\\'"),

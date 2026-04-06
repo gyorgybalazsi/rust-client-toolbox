@@ -435,7 +435,9 @@ html, body {
     border: none;
     color: #666;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
     opacity: 0;
     transition: opacity 0.15s;
 }
@@ -594,6 +596,16 @@ html, body {
     display: flex;
     gap: 6px;
     margin-bottom: 8px;
+}
+
+.zoom-nav {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.zoom-nav .analytics-btn {
+    flex: 1;
 }
 
 .zoom-date-input {

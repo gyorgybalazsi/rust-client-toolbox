@@ -2,11 +2,43 @@ use crate::components::analytics_chart::AnalyticsChart;
 use crate::components::analytics_queries::AnalyticsQueriesPanel;
 use crate::models::analytics::AnalyticsQuery;
 use crate::server::analytics::{
-    delete_analytics_query, get_offset_dates, load_analytics_queries, run_analytics_query,
-    save_analytics_query,
+    delete_analytics_query, get_max_offset, get_offset_dates, load_analytics_queries,
+    run_analytics_query, save_analytics_query,
 };
 use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet};
+
+/// Compute zoom range from end_offset input, window_size, and known max offset.
+fn apply_window(
+    end_offset_input: Signal<String>,
+    window_size: Signal<i64>,
+    max_offset_cache: Signal<Option<i64>>,
+    mut zoom_range: Signal<Option<(i64, i64)>>,
+) {
+    let Some(data_max) = *max_offset_cache.read() else {
+        zoom_range.set(None);
+        return;
+    };
+
+    let input = end_offset_input.read().clone();
+    let win = *window_size.read();
+
+    let end_off = if input.is_empty() {
+        data_max
+    } else if let Ok(v) = input.parse::<i64>() {
+        if v <= 0 {
+            // Negative or zero = relative to latest
+            data_max + v
+        } else {
+            v
+        }
+    } else {
+        data_max
+    };
+
+    let start_off = end_off - win;
+    zoom_range.set(Some((start_off, end_off)));
+}
 
 #[component]
 pub fn Analytics() -> Element {
@@ -15,16 +47,31 @@ pub fn Analytics() -> Element {
     let mut offset_dates: Signal<Vec<(i64, String)>> = use_signal(Vec::new);
     let mut active_queries: Signal<HashSet<String>> = use_signal(HashSet::new);
     let mut zoom_range: Signal<Option<(i64, i64)>> = use_signal(|| None);
+    let mut window_size = use_signal(|| 100i64);
+    let mut end_offset_input = use_signal(String::new); // empty = latest
+    let mut window_size = use_signal(|| 100i64);
+    let mut end_offset_input = use_signal(String::new); // empty = latest
     let mut loading_queries: Signal<HashSet<String>> = use_signal(HashSet::new);
     let mut query_errors: Signal<HashMap<String, String>> = use_signal(HashMap::new);
     let mut saved_queries: Signal<Vec<AnalyticsQuery>> = use_signal(Vec::new);
+    let mut max_offset_cache: Signal<Option<i64>> = use_signal(|| None);
     let mut dates_loaded = use_signal(|| false);
 
-    // Load saved queries on mount
+    // Load saved queries and max offset on mount
     let _load = use_future(move || async move {
         match load_analytics_queries().await {
             Ok(queries) => saved_queries.set(queries),
             Err(e) => tracing::error!("Failed to load analytics queries: {e}"),
+        }
+        match get_max_offset().await {
+            Ok(Some(max)) => {
+                max_offset_cache.set(Some(max));
+                // Set initial zoom range
+                let win = *window_size.read();
+                zoom_range.set(Some((max - win, max)));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::error!("Failed to get max offset: {e}"),
         }
     });
 
@@ -48,11 +95,17 @@ pub fn Analytics() -> Element {
             .find(|q| q.label == label)
             .cloned();
         if let Some(q) = query {
+            // Compute offset bounds from window signals
+            let zoom = *zoom_range.read();
+            let (min_off, max_off) = match zoom {
+                Some((min, max)) => (Some(min), Some(max)),
+                None => (None, None),
+            };
             loading_queries.write().insert(label.clone());
             query_errors.write().remove(&label);
             let label_done = label.clone();
             spawn(async move {
-                match run_analytics_query(q.cypher, q.min_time, q.max_time).await {
+                match run_analytics_query(q.cypher, min_off, max_off).await {
                     Ok(data) => {
                         query_results.write().insert(label_done.clone(), data);
                     }
@@ -125,10 +178,13 @@ pub fn Analytics() -> Element {
                         }
                     }
                     let q_cypher = cypher.clone();
-                    let q_min = min_time.clone();
-                    let q_max = max_time.clone();
+                    let zoom = *zoom_range.read();
+                    let (min_off, max_off) = match zoom {
+                        Some((min, max)) => (Some(min), Some(max)),
+                        None => (None, None),
+                    };
                     loading_queries.write().insert(label_clone.clone());
-                    match run_analytics_query(q_cypher, q_min, q_max).await {
+                    match run_analytics_query(q_cypher, min_off, max_off).await {
                         Ok(data) => {
                             query_results.write().insert(label_clone.clone(), data);
                         }
@@ -159,6 +215,11 @@ pub fn Analytics() -> Element {
 
         let active = active_queries.read().clone();
         let queries = saved_queries.read().clone();
+        let zoom = *zoom_range.read();
+        let (min_off, max_off) = match zoom {
+            Some((min, max)) => (Some(min), Some(max)),
+            None => (None, None),
+        };
         for label in active {
             if let Some(q) = queries.iter().find(|q| q.label == label) {
                 let q = q.clone();
@@ -166,7 +227,7 @@ pub fn Analytics() -> Element {
                 loading_queries.write().insert(label.clone());
                 query_errors.write().remove(&label);
                 spawn(async move {
-                    match run_analytics_query(q.cypher, q.min_time, q.max_time).await {
+                    match run_analytics_query(q.cypher, min_off, max_off).await {
                         Ok(data) => {
                             query_results.write().insert(label_done.clone(), data);
                         }
@@ -182,13 +243,8 @@ pub fn Analytics() -> Element {
         }
     };
 
-    let on_reset_zoom = move |_| {
-        zoom_range.set(None);
-    };
-
-    let on_zoom_change = move |(min, max): (i64, i64)| {
-        zoom_range.set(Some((min, max)));
-    };
+    // Apply window: compute zoom range from end_offset + window_size
+    apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
 
     let on_download_csv = move |_| {
         let results = query_results.read().clone();
@@ -222,131 +278,97 @@ pub fn Analytics() -> Element {
                 active_queries: active_queries.read().clone(),
                 saved_queries: saved_queries.read().clone(),
                 zoom_range: zoom,
-                on_zoom_change: on_zoom_change,
+                is_loading: !loading_queries.read().is_empty(),
             }
         }
         div { class: "analytics-right-panel",
-            h3 { "Date Range" }
-            {
-                let dates = offset_dates.read().clone();
-                let unique_dates: Vec<String> = {
-                    let mut d: Vec<String> = dates.iter()
-                        .map(|(_, s)| s[..10.min(s.len())].to_string())
-                        .collect();
-                    d.dedup();
-                    d
-                };
-                let min_date = unique_dates.first().cloned().unwrap_or_default();
-                let max_date = unique_dates.last().cloned().unwrap_or_default();
-                let from_date = dates.iter()
-                    .find(|(o, _)| zoom.map_or(true, |(min, _)| *o >= min))
-                    .map(|(_, d)| d[..10.min(d.len())].to_string())
-                    .unwrap_or_default();
-                let to_date = dates.iter().rev()
-                    .find(|(o, _)| zoom.map_or(true, |(_, max)| *o <= max))
-                    .map(|(_, d)| d[..10.min(d.len())].to_string())
-                    .unwrap_or_default();
-                let min_date2 = min_date.clone();
-                let max_date2 = max_date.clone();
-                let dates_for_from = dates.clone();
-                let dates_for_to = dates.clone();
-                let to_date_for_from = to_date.clone();
-                let from_date_for_to = from_date.clone();
-
-                let on_from_change = move |evt: Event<FormData>| {
-                    let selected = evt.value();
-                    if selected.is_empty() { return; }
-                    // Find first offset on or after selected date
-                    let min_off = dates_for_from.iter()
-                        .find(|(_, d)| &d[..10.min(d.len())] >= selected.as_str())
-                        .map(|(o, _)| *o);
-                    // Keep current "to" date's max offset
-                    let max_off = dates_for_from.iter().rev()
-                        .find(|(_, d)| &d[..10.min(d.len())] <= to_date_for_from.as_str())
-                        .map(|(o, _)| *o);
-                    if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
-                        zoom_range.set(Some((min_o, max_o)));
+            h3 { "Offset Window" }
+            div { class: "zoom-slider",
+                div { class: "zoom-row",
+                    span { class: "zoom-label", "End offset:" }
+                    input {
+                        r#type: "text",
+                        class: "zoom-date-input",
+                        placeholder: "latest",
+                        value: "{end_offset_input}",
+                        oninput: move |evt| {
+                            end_offset_input.set(evt.value());
+                            apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
+                        },
                     }
-                };
-
-                let on_to_change = move |evt: Event<FormData>| {
-                    let selected = evt.value();
-                    if selected.is_empty() { return; }
-                    // Keep current "from" date's min offset
-                    let min_off = dates_for_to.iter()
-                        .find(|(_, d)| &d[..10.min(d.len())] >= from_date_for_to.as_str())
-                        .map(|(o, _)| *o);
-                    // Find last offset on or before selected date
-                    let max_off = dates_for_to.iter().rev()
-                        .find(|(_, d)| &d[..10.min(d.len())] <= selected.as_str())
-                        .map(|(o, _)| *o);
-                    if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
-                        zoom_range.set(Some((min_o, max_o)));
-                    }
-                };
-
-                let dates_for_24h = dates.clone();
-                let dates_for_168h = dates.clone();
-
-                // Compute cutoff by subtracting hours from the latest timestamp in data.
-                // Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" into seconds, subtract, format back.
-                let mut on_last_n_hours = move |dates_ref: Vec<(i64, String)>, hours: u64| {
-                    if let Some((_, latest)) = dates_ref.last() {
-                        if let Some(cutoff) = subtract_hours_from_iso(latest, hours) {
-                            let min_off = dates_ref.iter()
-                                .find(|(_, d)| d.as_str() >= cutoff.as_str())
-                                .map(|(o, _)| *o);
-                            let max_off = dates_ref.last().map(|(o, _)| *o);
-                            if let (Some(min_o), Some(max_o)) = (min_off, max_off) {
-                                zoom_range.set(Some((min_o, max_o)));
+                }
+                div { class: "zoom-row",
+                    span { class: "zoom-label", "Window:" }
+                    input {
+                        r#type: "number",
+                        class: "zoom-date-input",
+                        value: window_size.read().to_string(),
+                        oninput: move |evt| {
+                            if let Ok(v) = evt.value().parse::<i64>() {
+                                if v > 0 {
+                                    window_size.set(v);
+                                    apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
+                                }
                             }
-                        }
+                        },
                     }
-                };
-
-                let on_last_24h = move |_| {
-                    on_last_n_hours(dates_for_24h.clone(), 24);
-                };
-
-                let on_last_168h = move |_| {
-                    on_last_n_hours(dates_for_168h.clone(), 168);
-                };
-
-                rsx! {
-                    div { class: "zoom-presets",
-                        button { class: "analytics-btn", onclick: on_last_24h, "Last 24 hours" }
-                        button { class: "analytics-btn", onclick: on_last_168h, "Last 168 hours" }
+                }
+                div { class: "zoom-nav",
+                    button {
+                        class: "analytics-btn",
+                        onclick: move |_| {
+                            end_offset_input.set(String::new());
+                            apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
+                        },
+                        "Latest"
                     }
-                    div { class: "zoom-slider",
-                        div { class: "zoom-row",
-                            span { class: "zoom-label", "From:" }
-                            input {
-                                r#type: "date",
-                                class: "zoom-date-input",
-                                min: min_date,
-                                max: max_date,
-                                value: from_date,
-                                oninput: on_from_change,
+                    button {
+                        class: "analytics-btn",
+                        onclick: move |_| {
+                            let win = *window_size.read();
+                            let current = end_offset_input.read().clone();
+                            let max_off = max_offset_cache.read().unwrap_or(0);
+                            let current_end = if current.is_empty() {
+                                max_off
+                            } else if let Ok(v) = current.parse::<i64>() {
+                                if v <= 0 { max_off + v } else { v }
+                            } else {
+                                max_off
+                            };
+                            let new_end = (current_end - win).max(win);
+                            end_offset_input.set(new_end.to_string());
+                            apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
+                        },
+                        "<< Prev"
+                    }
+                    button {
+                        class: "analytics-btn",
+                        onclick: move |_| {
+                            let win = *window_size.read();
+                            let current = end_offset_input.read().clone();
+                            let max_off = max_offset_cache.read().unwrap_or(0);
+                            let current_end = if current.is_empty() {
+                                max_off
+                            } else if let Ok(v) = current.parse::<i64>() {
+                                if v <= 0 { max_off + v } else { v }
+                            } else {
+                                max_off
+                            };
+                            let new_end = current_end + win;
+                            if new_end >= max_off {
+                                end_offset_input.set(String::new()); // back to "latest"
+                            } else {
+                                end_offset_input.set(new_end.to_string());
                             }
-                        }
-                        div { class: "zoom-row",
-                            span { class: "zoom-label", "To:" }
-                            input {
-                                r#type: "date",
-                                class: "zoom-date-input",
-                                min: min_date2,
-                                max: max_date2,
-                                value: to_date,
-                                oninput: on_to_change,
-                            }
-                        }
+                            apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
+                        },
+                        "Next >>"
                     }
                 }
             }
             h3 { "Actions" }
             div { class: "analytics-buttons",
                 button { class: "analytics-btn", onclick: on_refresh, "Refresh" }
-                button { class: "analytics-btn", onclick: on_reset_zoom, "Reset Zoom" }
                 button { class: "analytics-btn", onclick: on_download_csv, "Download CSV" }
             }
             h4 { "Legend" }
@@ -386,63 +408,6 @@ pub fn Analytics() -> Element {
             }
         }
     }
-}
-
-/// Subtract N hours from an ISO 8601 timestamp "YYYY-MM-DDTHH:MM:SSZ".
-/// Returns None if parsing fails. Uses simple day/hour arithmetic (no leap seconds).
-fn subtract_hours_from_iso(iso: &str, hours: u64) -> Option<String> {
-    // Parse "2026-03-23T15:29:14Z"
-    if iso.len() < 19 { return None; }
-    let year: i64 = iso[0..4].parse().ok()?;
-    let month: i64 = iso[5..7].parse().ok()?;
-    let day: i64 = iso[8..10].parse().ok()?;
-    let hour: i64 = iso[11..13].parse().ok()?;
-    let min: i64 = iso[14..16].parse().ok()?;
-    let sec: i64 = iso[17..19].parse().ok()?;
-
-    // Convert to a simple epoch-like total hours, subtract, convert back
-    // Use a rough days-since-epoch approach
-    let days_in_month = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let is_leap = |y: i64| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
-
-    let mut total_days: i64 = 0;
-    for y in 2000..year {
-        total_days += if is_leap(y) { 366 } else { 365 };
-    }
-    for m in 1..month {
-        total_days += days_in_month[m as usize] as i64;
-        if m == 2 && is_leap(year) { total_days += 1; }
-    }
-    total_days += day - 1;
-
-    let total_secs = total_days * 86400 + hour * 3600 + min * 60 + sec;
-    let new_secs = total_secs - (hours as i64) * 3600;
-
-    // Convert back
-    let mut remaining = new_secs;
-    let new_sec = remaining % 60; remaining /= 60;
-    let new_min = remaining % 60; remaining /= 60;
-    let new_hour = remaining % 24; remaining /= 24;
-
-    // remaining = days since 2000-01-01
-    let mut y = 2000i64;
-    loop {
-        let dy = if is_leap(y) { 366 } else { 365 };
-        if remaining < dy { break; }
-        remaining -= dy;
-        y += 1;
-    }
-    let mut m = 1i64;
-    loop {
-        let mut dm = days_in_month[m as usize] as i64;
-        if m == 2 && is_leap(y) { dm += 1; }
-        if remaining < dm { break; }
-        remaining -= dm;
-        m += 1;
-    }
-    let d = remaining + 1;
-
-    Some(format!("{y:04}-{m:02}-{d:02}T{new_hour:02}:{new_min:02}:{new_sec:02}Z"))
 }
 
 fn build_csv(

@@ -20,6 +20,7 @@ pub struct SyncProfile {
     pub name: String,
     pub has_keycloak: bool,
     pub url: String,
+    pub starting_offset: Option<i64>,
 }
 
 #[cfg(feature = "server")]
@@ -65,21 +66,35 @@ pub async fn get_sync_profiles() -> Result<Vec<SyncProfile>, ServerFnError> {
                 .and_then(|u| u.as_str())
                 .unwrap_or("unknown")
                 .to_string();
+            let starting_offset = value
+                .get("ledger")
+                .and_then(|l| l.get("starting_offset"))
+                .and_then(|v| v.as_integer());
             profiles.push(SyncProfile {
                 name: name.clone(),
                 has_keycloak,
                 url,
+                starting_offset,
             });
         }
     }
 
-    profiles.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort: local first, then devnet, then mainnet, then alphabetical
+    let order = |name: &str| -> usize {
+        match name {
+            "local" => 0,
+            "devnet" => 1,
+            "mainnet" => 2,
+            _ => 3,
+        }
+    };
+    profiles.sort_by(|a, b| order(&a.name).cmp(&order(&b.name)).then(a.name.cmp(&b.name)));
     Ok(profiles)
 }
 
 /// Start the sync process
 #[server]
-pub async fn start_sync(profile: String, fresh: bool) -> Result<(), ServerFnError> {
+pub async fn start_sync(profile: String, fresh: bool, starting_offset: Option<i64>) -> Result<(), ServerFnError> {
     use tokio::process::Command;
     use std::process::Stdio;
 
@@ -102,10 +117,10 @@ pub async fn start_sync(profile: String, fresh: bool) -> Result<(), ServerFnErro
     let config_path = find_explorer_config()
         .ok_or_else(|| ServerFnError::new("Could not find ledger-explorer config.toml"))?;
 
-    // Check if profile has keycloak
+    // Read and optionally modify config
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| ServerFnError::new(format!("Failed to read config: {e}")))?;
-    let table: toml::Value = toml::from_str(&content)
+    let mut table: toml::Value = toml::from_str(&content)
         .map_err(|e| ServerFnError::new(format!("Failed to parse config: {e}")))?;
     let has_keycloak = table
         .get("profiles")
@@ -113,10 +128,31 @@ pub async fn start_sync(profile: String, fresh: bool) -> Result<(), ServerFnErro
         .and_then(|p| p.get("keycloak"))
         .is_some();
 
+    // If starting_offset specified, write a temp config with the override
+    let effective_config_path = if let Some(offset) = starting_offset {
+        if let Some(ledger) = table
+            .get_mut("profiles")
+            .and_then(|p| p.get_mut(&profile))
+            .and_then(|p| p.get_mut("ledger"))
+        {
+            ledger.as_table_mut().map(|t| {
+                t.insert("starting_offset".to_string(), toml::Value::Integer(offset));
+            });
+        }
+        let tmp_path = "/tmp/ledger-graph-ui-sync-config.toml";
+        let modified = toml::to_string_pretty(&table)
+            .map_err(|e| ServerFnError::new(format!("Failed to serialize config: {e}")))?;
+        std::fs::write(tmp_path, modified)
+            .map_err(|e| ServerFnError::new(format!("Failed to write temp config: {e}")))?;
+        tmp_path.to_string()
+    } else {
+        config_path.clone()
+    };
+
     let mut cmd = Command::new(&binary);
     cmd.arg("sync")
         .arg("--config-file")
-        .arg(&config_path)
+        .arg(&effective_config_path)
         .arg("--profile")
         .arg(&profile);
 

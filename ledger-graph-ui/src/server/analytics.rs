@@ -64,43 +64,51 @@ pub async fn save_analytics_query(
 ) -> Result<(), ServerFnError> {
     let pool = super::neo4j_pool::pool();
 
-    // Try wrapping in CALL first; if that fails (e.g. nested CALL), run raw with LIMIT
+    // Validate by running the query with extreme offset bounds and LIMIT.
+    // Pass $min_off/$max_off since queries may reference them.
     let validation_cypher = format!(
         "CALL {{ {cypher} }} WITH offset, value LIMIT 10"
     );
     let validation_result = pool
-        .execute(neo4rs::query(&validation_cypher))
+        .execute(
+            neo4rs::query(&validation_cypher)
+                .param("min_off", i64::MIN)
+                .param("max_off", i64::MAX)
+        )
         .await;
 
-    let mut result = match validation_result {
-        Ok(r) => r,
+    // Try to validate, but don't block saving if validation fails.
+    // Complex queries (nested CALL, ACS) may not validate easily.
+    let validated = match validation_result {
+        Ok(mut r) => {
+            if let Ok(Some(row)) = r.next().await {
+                let ok_offset = row.get::<i64>("offset").is_ok();
+                let ok_value = row.get::<i64>("value").is_ok()
+                    || row.get::<f64>("value").is_ok();
+                if !ok_offset || !ok_value {
+                    tracing::warn!("Query validation: columns may not match expected (offset, value) shape");
+                }
+            }
+            true
+        }
         Err(_) => {
-            // Fallback: run the query directly (it may already have ORDER BY, append LIMIT)
+            // CALL wrapper failed, try fallback
             let fallback = format!("{cypher} LIMIT 10");
-            pool.execute(neo4rs::query(&fallback))
-                .await
-                .map_err(|e| ServerFnError::new(format!("Query validation failed: {e}")))?
+            match pool.execute(
+                neo4rs::query(&fallback)
+                    .param("min_off", i64::MIN)
+                    .param("max_off", i64::MAX)
+            ).await {
+                Ok(_) => true,
+                Err(_) => {
+                    // Both failed — save anyway, errors will show when query runs
+                    tracing::warn!("Query validation skipped for '{label}' — could not validate shape");
+                    false
+                }
+            }
         }
     };
-
-    if let Some(row) = result.next().await.map_err(|e| {
-        ServerFnError::new(format!("Failed to read validation result: {e}"))
-    })? {
-        let _offset: i64 = row.get("offset").map_err(|e| {
-            ServerFnError::new(format!(
-                "Column 'offset' must be integer. Got error: {e}"
-            ))
-        })?;
-        let _value: f64 = row
-            .get::<i64>("value")
-            .map(|v| v as f64)
-            .or_else(|_| row.get::<f64>("value"))
-            .map_err(|e| {
-                ServerFnError::new(format!(
-                    "Column 'value' must be numeric. Got error: {e}"
-                ))
-            })?;
-    }
+    let _ = validated; // saved regardless
 
     let mut local = load_queries_from_file(LOCAL_QUERIES_PATH, false);
     local.retain(|q| q.label != label);
@@ -129,55 +137,23 @@ pub async fn delete_analytics_query(label: String) -> Result<(), ServerFnError> 
 }
 
 /// Run a Cypher query and return (offset, value) tuples.
-/// If min_time/max_time are provided, queries offset bounds first,
-/// runs the user query, then filters results in Rust.
+/// Filters results to [min_offset, max_offset] range server-side.
 #[server]
 pub async fn run_analytics_query(
     cypher: String,
-    min_time: Option<String>,
-    max_time: Option<String>,
+    min_offset: Option<i64>,
+    max_offset: Option<i64>,
 ) -> Result<Vec<(i64, f64)>, ServerFnError> {
     let pool = super::neo4j_pool::pool();
 
-    let (min_off, max_off) = if min_time.is_some() || max_time.is_some() {
-        let mut cypher_str = String::from("MATCH (t:Transaction) WHERE ");
-        let mut conditions = Vec::new();
-        if min_time.is_some() {
-            conditions.push("t.effective_at >= $min_time");
-        }
-        if max_time.is_some() {
-            conditions.push("t.effective_at <= $max_time");
-        }
-        cypher_str.push_str(&conditions.join(" AND "));
-        cypher_str.push_str(" RETURN min(t.offset) AS min_off, max(t.offset) AS max_off");
-
-        let mut q = neo4rs::query(&cypher_str);
-        if let Some(ref min_t) = min_time {
-            q = q.param("min_time", min_t.as_str());
-        }
-        if let Some(ref max_t) = max_time {
-            q = q.param("max_time", max_t.as_str());
-        }
-
-        let mut result = pool.execute(q).await.map_err(|e| {
-            ServerFnError::new(format!("Offset bounds query failed: {e}"))
-        })?;
-
-        if let Some(row) = result.next().await.map_err(|e| {
-            ServerFnError::new(format!("Failed to read offset bounds: {e}"))
-        })? {
-            let min_o: Option<i64> = row.get("min_off").ok();
-            let max_o: Option<i64> = row.get("max_off").ok();
-            (min_o, max_o)
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
-
+    // Always pass min_off and max_off as Neo4j query parameters.
+    // Use extreme defaults when no bounds specified, so $min_off/$max_off in
+    // queries always resolve to valid values (never null).
+    let q = neo4rs::query(&cypher)
+        .param("min_off", min_offset.unwrap_or(i64::MIN))
+        .param("max_off", max_offset.unwrap_or(i64::MAX));
     let mut result = pool
-        .execute(neo4rs::query(&cypher))
+        .execute(q)
         .await
         .map_err(|e| ServerFnError::new(format!("Analytics query failed: {e}")))?;
 
@@ -189,6 +165,14 @@ pub async fn run_analytics_query(
             Ok(v) => v,
             Err(_) => continue,
         };
+        // Filter by offset bounds (queries return ORDER BY offset,
+        // so we can skip early and break early)
+        if let Some(min_o) = min_offset {
+            if offset < min_o { continue; }
+        }
+        if let Some(max_o) = max_offset {
+            if offset > max_o { break; }
+        }
         // Neo4j count() returns i64. Try i64 first, then f64.
         let value: f64 = row
             .get::<i64>("value")
@@ -196,13 +180,6 @@ pub async fn run_analytics_query(
             .or_else(|_| row.get::<f64>("value"))
             .unwrap_or(0.0);
         data.push((offset, value));
-    }
-
-    if let Some(min_o) = min_off {
-        data.retain(|(offset, _)| *offset >= min_o);
-    }
-    if let Some(max_o) = max_off {
-        data.retain(|(offset, _)| *offset <= max_o);
     }
 
     data.sort_by_key(|(offset, _)| *offset);
@@ -236,6 +213,57 @@ pub async fn get_offset_dates() -> Result<Vec<(i64, String)>, ServerFnError> {
     }
 
     Ok(dates)
+}
+
+/// Get the maximum transaction offset in Neo4j.
+#[server]
+pub async fn get_max_offset() -> Result<Option<i64>, ServerFnError> {
+    let pool = super::neo4j_pool::pool();
+    let q = neo4rs::query("MATCH (t:Transaction) RETURN max(t.offset) AS max_off");
+    let mut result = pool.execute(q).await.map_err(|e| {
+        ServerFnError::new(format!("Max offset query failed: {e}"))
+    })?;
+    if let Some(row) = result.next().await.map_err(|e| {
+        ServerFnError::new(format!("Failed to read max offset: {e}"))
+    })? {
+        Ok(row.get::<i64>("max_off").ok())
+    } else {
+        Ok(None)
+    }
+}
+
+/// Return the current server time as ISO 8601 string.
+#[server]
+pub async fn get_server_time() -> Result<String, ServerFnError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let secs = now % 60;
+    let mins = (now / 60) % 60;
+    let hours = (now / 3600) % 24;
+    let mut days = (now / 86400) as i64;
+
+    // Convert days since epoch to YYYY-MM-DD
+    let mut year = 1970i64;
+    let is_leap = |y: i64| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    loop {
+        let dy = if is_leap(year) { 366 } else { 365 };
+        if days < dy { break; }
+        days -= dy;
+        year += 1;
+    }
+    let days_in_month = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 1i64;
+    loop {
+        let mut dm = days_in_month[month as usize];
+        if month == 2 && is_leap(year) { dm += 1; }
+        if days < dm { break; }
+        days -= dm;
+        month += 1;
+    }
+    let day = days + 1;
+    Ok(format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{secs:02}Z"))
 }
 
 /// Fetch all distinct template names from Created nodes.

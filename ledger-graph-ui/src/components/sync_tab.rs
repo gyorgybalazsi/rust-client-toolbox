@@ -8,6 +8,7 @@ pub fn SyncTab() -> Element {
     let mut profiles: Signal<Vec<SyncProfile>> = use_signal(Vec::new);
     let mut selected_profile = use_signal(String::new);
     let mut fresh = use_signal(|| false);
+    let mut starting_offset = use_signal(String::new);
     let mut status: Signal<Option<SyncStatus>> = use_signal(|| None);
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut starting = use_signal(|| false);
@@ -19,6 +20,9 @@ pub fn SyncTab() -> Element {
             Ok(profs) => {
                 if let Some(first) = profs.first() {
                     selected_profile.set(first.name.clone());
+                    if let Some(off) = first.starting_offset {
+                        starting_offset.set(off.to_string());
+                    }
                 }
                 profiles.set(profs);
             }
@@ -40,6 +44,10 @@ pub fn SyncTab() -> Element {
     let on_start = move |_| {
         let profile = selected_profile.read().clone();
         let is_fresh = *fresh.read();
+        let offset: Option<i64> = {
+            let s = starting_offset.read().clone();
+            if s.is_empty() { None } else { s.parse().ok() }
+        };
         if profile.is_empty() {
             error.set(Some("Select a profile first".to_string()));
             return;
@@ -47,7 +55,7 @@ pub fn SyncTab() -> Element {
         starting.set(true);
         error.set(None);
         spawn(async move {
-            match start_sync(profile, is_fresh).await {
+            match start_sync(profile, is_fresh, offset).await {
                 Ok(()) => {}
                 Err(e) => error.set(Some(format!("{e}"))),
             }
@@ -83,14 +91,22 @@ pub fn SyncTab() -> Element {
                         class: "sync-select",
                         value: "{selected_profile}",
                         disabled: is_running,
-                        oninput: move |evt| selected_profile.set(evt.value()),
+                        oninput: move |evt| {
+                            let name = evt.value();
+                            selected_profile.set(name.clone());
+                            let off = profiles.read().iter()
+                                .find(|p| p.name == name)
+                                .and_then(|p| p.starting_offset)
+                                .map(|o| o.to_string())
+                                .unwrap_or_default();
+                            starting_offset.set(off);
+                        },
                         for prof in prof_list.iter() {
                             {
-                                let keycloak_indicator = if prof.has_keycloak { " (KC)" } else { "" };
                                 rsx! {
                                     option {
                                         value: "{prof.name}",
-                                        "{prof.name}{keycloak_indicator}"
+                                        "{prof.name}"
                                     }
                                 }
                             }
@@ -101,12 +117,22 @@ pub fn SyncTab() -> Element {
                 // Show URL for selected profile
                 {
                     let sel = selected_profile.read().clone();
-                    let url = prof_list.iter()
-                        .find(|p| p.name == sel)
-                        .map(|p| p.url.as_str())
-                        .unwrap_or("");
+                    let prof = prof_list.iter().find(|p| p.name == sel);
+                    let url = prof.map(|p| p.url.as_str()).unwrap_or("");
                     rsx! {
                         div { class: "sync-url", "{url}" }
+                    }
+                }
+
+                div { class: "sync-field",
+                    label { class: "sync-label", "Starting offset:" }
+                    input {
+                        r#type: "text",
+                        class: "sync-select",
+                        placeholder: "e.g. -5000000 (empty = default)",
+                        value: "{starting_offset}",
+                        disabled: is_running,
+                        oninput: move |evt| starting_offset.set(evt.value()),
                     }
                 }
 
