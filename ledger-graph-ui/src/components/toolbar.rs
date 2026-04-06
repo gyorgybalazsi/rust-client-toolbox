@@ -2,7 +2,7 @@ use crate::state::graph_state::Viewport;
 use dioxus::prelude::*;
 
 #[component]
-pub fn Toolbar(viewport: Signal<Viewport>, lasso_active: Signal<bool>) -> Element {
+pub fn Toolbar(viewport: Signal<Viewport>) -> Element {
     let zoom_in = {
         let mut viewport = viewport;
         move |_| {
@@ -31,19 +31,12 @@ pub fn Toolbar(viewport: Signal<Viewport>, lasso_active: Signal<bool>) -> Elemen
 
     let zoom_pct = (viewport.read().zoom * 100.0) as u32;
 
-    let is_lasso = *lasso_active.read();
-
     rsx! {
         div { class: "toolbar",
             button { class: "tool-btn", onclick: zoom_in, "+" }
             span { class: "zoom-level", "{zoom_pct}%" }
             button { class: "tool-btn", onclick: zoom_out, "-" }
             button { class: "tool-btn", onclick: reset, "Reset" }
-            button {
-                class: if is_lasso { "tool-btn tool-btn-active" } else { "tool-btn" },
-                onclick: move |_| lasso_active.set(!is_lasso),
-                "Zoom In"
-            }
         }
     }
 }

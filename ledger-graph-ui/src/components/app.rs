@@ -136,7 +136,6 @@ pub fn App() -> Element {
     let viewport = use_signal(Viewport::default);
     let mut selection = use_signal(Selection::default);
     let mut active_tab = use_signal(|| ActiveTab::Graph);
-    let lasso_active = use_signal(|| false);
 
     // Graph tab offset window
     let mut graph_window_size = use_signal(|| 100i64);
@@ -254,7 +253,7 @@ pub fn App() -> Element {
                     if is_replaying {
                         span { class: "replay-status", "Replaying {step_display}/{total_display}" }
                     }
-                    Toolbar { viewport, lasso_active }
+                    Toolbar { viewport }
                 }
             }
             div { class: "tab-bar",
@@ -312,7 +311,6 @@ pub fn App() -> Element {
                                     graph: graph.read().clone(),
                                     viewport,
                                     selection,
-                                    lasso_active,
                                 }
                             }
                             div { class: "right-panel",
