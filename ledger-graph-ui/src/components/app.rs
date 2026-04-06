@@ -383,6 +383,17 @@ pub fn App() -> Element {
                                     graph: graph.read().clone(),
                                     selection,
                                 }
+                                div { class: "nav-help",
+                                    h4 { "Navigation" }
+                                    div { class: "nav-help-items",
+                                        div { class: "nav-help-item", span { class: "nav-key", "Arrows" } " Pan" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "+" } " Zoom in" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "-" } " Zoom out" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "0" } " Reset view" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "Dbl-click" } " Center on point" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "Drag" } " Pan" }
+                                    }
+                                }
                             }
                         }
                     }
