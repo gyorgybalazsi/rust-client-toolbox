@@ -59,6 +59,11 @@ html, body {
     background: #1a4a8e;
 }
 
+.tool-btn-active {
+    background: #4A90D9 !important;
+    color: #fff;
+}
+
 .zoom-level {
     font-size: 13px;
     color: #aaa;
@@ -315,6 +320,10 @@ html, body {
     height: 100% !important;
     cursor: grab;
     overflow: visible;
+}
+
+.graph-canvas.lasso-cursor {
+    cursor: crosshair;
 }
 
 .graph-canvas:active {
@@ -708,6 +717,42 @@ html, body {
 .legend-count {
     color: #888;
     font-size: 11px;
+}
+
+.legend-empty {
+    opacity: 0.5;
+}
+
+.graph-canvas-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.lasso-rect {
+    position: fixed;
+    border: 2px dashed #4A90D9;
+    background: rgba(74, 144, 217, 0.1);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.graph-offset-window {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #0f3460;
+}
+
+.graph-offset-window h4 {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.legend-no-data {
+    color: #E74C3C;
+    font-size: 10px;
+    font-style: italic;
 }
 
 /* Sync Tab */

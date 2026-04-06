@@ -1,8 +1,32 @@
 use crate::models::analytics::{AnalyticsQuery, AnalyticsQueryFile};
 use dioxus::prelude::*;
 
-const SHARED_QUERIES_PATH: &str = "analytics-queries.toml";
-const LOCAL_QUERIES_PATH: &str = "analytics-queries.local.toml";
+const SHARED_QUERIES_FILE: &str = "analytics-queries.toml";
+const LOCAL_QUERIES_FILE: &str = "analytics-queries.local.toml";
+
+fn queries_dir() -> String {
+    // Try ledger-graph-ui/ subdirectory first, then current dir
+    let candidates = [
+        "ledger-graph-ui",
+        ".",
+        "../ledger-graph-ui",
+    ];
+    for dir in &candidates {
+        let path = format!("{dir}/{SHARED_QUERIES_FILE}");
+        if std::path::Path::new(&path).exists() {
+            return dir.to_string();
+        }
+    }
+    ".".to_string()
+}
+
+fn shared_queries_path() -> String {
+    format!("{}/{SHARED_QUERIES_FILE}", queries_dir())
+}
+
+fn local_queries_path() -> String {
+    format!("{}/{LOCAL_QUERIES_FILE}", queries_dir())
+}
 
 fn load_queries_from_file(path: &str, shared: bool) -> Vec<AnalyticsQuery> {
     let content = match std::fs::read_to_string(path) {
@@ -31,8 +55,8 @@ fn save_local_queries(queries: &[AnalyticsQuery]) -> Result<(), ServerFnError> {
     };
     let content = toml::to_string_pretty(&file)
         .map_err(|e| ServerFnError::new(format!("Failed to serialize queries: {e}")))?;
-    std::fs::write(LOCAL_QUERIES_PATH, content)
-        .map_err(|e| ServerFnError::new(format!("Failed to write {LOCAL_QUERIES_PATH}: {e}")))?;
+    std::fs::write(&local_queries_path(), content)
+        .map_err(|e| ServerFnError::new(format!("Failed to write local queries file: {e}")))?;
     Ok(())
 }
 
@@ -40,8 +64,8 @@ fn save_local_queries(queries: &[AnalyticsQuery]) -> Result<(), ServerFnError> {
 /// Local queries override shared queries with the same label.
 #[server]
 pub async fn load_analytics_queries() -> Result<Vec<AnalyticsQuery>, ServerFnError> {
-    let shared = load_queries_from_file(SHARED_QUERIES_PATH, true);
-    let local = load_queries_from_file(LOCAL_QUERIES_PATH, false);
+    let shared = load_queries_from_file(&shared_queries_path(), true);
+    let local = load_queries_from_file(&local_queries_path(), false);
 
     let local_labels: std::collections::HashSet<String> =
         local.iter().map(|q| q.label.clone()).collect();
@@ -110,7 +134,7 @@ pub async fn save_analytics_query(
     };
     let _ = validated; // saved regardless
 
-    let mut local = load_queries_from_file(LOCAL_QUERIES_PATH, false);
+    let mut local = load_queries_from_file(&local_queries_path(), false);
     local.retain(|q| q.label != label);
     local.push(AnalyticsQuery {
         label,
@@ -125,7 +149,7 @@ pub async fn save_analytics_query(
 /// Delete a query from the local TOML file.
 #[server]
 pub async fn delete_analytics_query(label: String) -> Result<(), ServerFnError> {
-    let mut local = load_queries_from_file(LOCAL_QUERIES_PATH, false);
+    let mut local = load_queries_from_file(&local_queries_path(), false);
     let before = local.len();
     local.retain(|q| q.label != label);
     if local.len() == before {

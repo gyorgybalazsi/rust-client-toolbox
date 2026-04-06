@@ -1,10 +1,10 @@
 [[query]]
 label = "Created per offset"
-cypher = "MATCH (t:Transaction) WHERE t.offset >= $min_off AND t.offset <= $max_off WITH t MATCH (t)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(c:Created) RETURN t.offset AS offset, count(c) AS value ORDER BY offset"
+cypher = "MATCH (c:Created) WHERE c.offset >= $min_off AND c.offset <= $max_off RETURN c.offset AS offset, count(c) AS value ORDER BY offset"
 
 [[query]]
 label = "Exercised per offset"
-cypher = "MATCH (t:Transaction) WHERE t.offset >= $min_off AND t.offset <= $max_off WITH t MATCH (t)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised) RETURN t.offset AS offset, count(x) AS value ORDER BY offset"
+cypher = "MATCH (x:Exercised) WHERE x.offset >= $min_off AND x.offset <= $max_off RETURN x.offset AS offset, count(x) AS value ORDER BY offset"
 
 [[query]]
 label = "Active Contract Set"

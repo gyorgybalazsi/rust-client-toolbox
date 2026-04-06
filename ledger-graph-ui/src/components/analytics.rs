@@ -20,14 +20,15 @@ fn apply_window(
         return;
     };
 
+    use crate::models::analytics::parse_offset;
+
     let input = end_offset_input.read().clone();
     let win = *window_size.read();
 
     let end_off = if input.is_empty() {
         data_max
-    } else if let Ok(v) = input.parse::<i64>() {
+    } else if let Some(v) = parse_offset(&input) {
         if v <= 0 {
-            // Negative or zero = relative to latest
             data_max + v
         } else {
             v
@@ -300,11 +301,12 @@ pub fn Analytics() -> Element {
                 div { class: "zoom-row",
                     span { class: "zoom-label", "Window:" }
                     input {
-                        r#type: "number",
+                        r#type: "text",
                         class: "zoom-date-input",
+                        placeholder: "e.g. 100, 10K, 1M",
                         value: window_size.read().to_string(),
                         oninput: move |evt| {
-                            if let Ok(v) = evt.value().parse::<i64>() {
+                            if let Some(v) = crate::models::analytics::parse_offset(&evt.value()) {
                                 if v > 0 {
                                     window_size.set(v);
                                     apply_window(end_offset_input, window_size, max_offset_cache, zoom_range);
@@ -330,7 +332,7 @@ pub fn Analytics() -> Element {
                             let max_off = max_offset_cache.read().unwrap_or(0);
                             let current_end = if current.is_empty() {
                                 max_off
-                            } else if let Ok(v) = current.parse::<i64>() {
+                            } else if let Some(v) = crate::models::analytics::parse_offset(&current) {
                                 if v <= 0 { max_off + v } else { v }
                             } else {
                                 max_off
@@ -349,7 +351,7 @@ pub fn Analytics() -> Element {
                             let max_off = max_offset_cache.read().unwrap_or(0);
                             let current_end = if current.is_empty() {
                                 max_off
-                            } else if let Ok(v) = current.parse::<i64>() {
+                            } else if let Some(v) = crate::models::analytics::parse_offset(&current) {
                                 if v <= 0 { max_off + v } else { v }
                             } else {
                                 max_off
@@ -389,15 +391,23 @@ pub fn Analytics() -> Element {
                                         .count()
                                 })
                                 .unwrap_or(0);
+                            let is_loading = loading_queries.read().contains(&query.label);
+                            let row_class = if count == 0 && !is_loading { "legend-row legend-empty" } else { "legend-row" };
                             rsx! {
                                 div {
-                                    class: "legend-row",
+                                    class: row_class,
                                     span {
                                         class: "legend-dot",
                                         style: "background: {color};",
                                     }
                                     span { class: "legend-label", "{query.label}" }
-                                    span { class: "legend-count", "({count})" }
+                                    if is_loading {
+                                        span { class: "legend-count", "(loading...)" }
+                                    } else if count == 0 {
+                                        span { class: "legend-no-data", "no data in window" }
+                                    } else {
+                                        span { class: "legend-count", "({count})" }
+                                    }
                                 }
                             }
                         } else {

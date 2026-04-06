@@ -254,14 +254,14 @@ pub fn AnalyticsChart(
                             .join(" ");
                         let show_dots = points.len() <= 50;
                         rsx! {
-                            polyline { points: polyline_points, fill: "none", stroke: color, stroke_width: 2.0 }
+                            polyline { points: polyline_points, fill: "none", stroke: color, stroke_width: 1.0 }
                             if show_dots {
                                 for (o, v) in points.iter() {
                                     {
                                         let cx = plot_x(*o, zoom_min, zoom_max);
                                         let cy = plot_y(*v, y_min, y_max);
                                         rsx! {
-                                            circle { cx: cx, cy: cy, r: 3.5, fill: color, stroke: "#1a1a2e", stroke_width: 1.5 }
+                                            circle { cx: cx, cy: cy, r: 2.0, fill: color, stroke: "#1a1a2e", stroke_width: 1.0 }
                                         }
                                     }
                                 }
@@ -270,26 +270,6 @@ pub fn AnalyticsChart(
                     }
                 }
 
-                // Legend
-                {
-                    let legend_x = CHART_WIDTH - CHART_PADDING_RIGHT - 160.0;
-                    let legend_y = CHART_PADDING_TOP + 10.0;
-                    let active_series: Vec<_> = saved_queries.iter().enumerate()
-                        .filter(|(_, q)| active_queries.contains(&q.label))
-                        .collect();
-                    rsx! {
-                        for (li, (idx, query)) in active_series.iter().enumerate() {
-                            {
-                                let y = legend_y + (li as f64) * 18.0;
-                                let color = color_for_index(*idx);
-                                rsx! {
-                                    circle { cx: legend_x, cy: y, r: 4.0, fill: color }
-                                    text { x: legend_x + 10.0, y: y + 4.0, font_size: "11px", fill: "#ccc", {query.label.clone()} }
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
         }

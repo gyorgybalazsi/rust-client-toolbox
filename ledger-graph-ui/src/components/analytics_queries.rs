@@ -203,11 +203,10 @@ fn TemplateAcsDropdown(
 
 fn exercises_cypher_for_choice(template: &str, choice: &str) -> String {
     format!(
-        "MATCH (t:Transaction) WHERE t.offset >= $min_off AND t.offset <= $max_off \
-         WITH t \
-         MATCH (t)-[:ACTION]->(e)-[:CONSEQUENCE*0..]->(x:Exercised)-[:TARGET]->(c:Created) \
-         WHERE c.template_name = '{}' AND x.choice_name = '{}' \
-         RETURN t.offset AS offset, count(x) AS value ORDER BY offset",
+        "MATCH (x:Exercised)-[:TARGET]->(c:Created) \
+         WHERE x.offset >= $min_off AND x.offset <= $max_off \
+         AND c.template_name = '{}' AND x.choice_name = '{}' \
+         RETURN x.offset AS offset, count(x) AS value ORDER BY offset",
         template.replace('\'', "\\'"),
         choice.replace('\'', "\\'")
     )
