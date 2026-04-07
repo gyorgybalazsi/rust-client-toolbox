@@ -54,6 +54,7 @@ pub fn AnalyticsChart(
     saved_queries: Vec<AnalyticsQuery>,
     zoom_range: Option<(i64, i64)>,
     is_loading: bool,
+    show_offset_ticks: bool,
 ) -> Element {
     let all_offsets: Vec<i64> = query_results
         .iter()
@@ -200,8 +201,8 @@ pub fn AnalyticsChart(
                 line { x1: CHART_PADDING_LEFT, y1: CHART_PADDING_TOP, x2: CHART_PADDING_LEFT, y2: CHART_HEIGHT - CHART_PADDING_BOTTOM, stroke: "#555", stroke_width: 1.0 }
                 line { x1: CHART_PADDING_LEFT, y1: CHART_HEIGHT - CHART_PADDING_BOTTOM, x2: CHART_WIDTH - CHART_PADDING_RIGHT, y2: CHART_HEIGHT - CHART_PADDING_BOTTOM, stroke: "#555", stroke_width: 1.0 }
 
-                // Offset tick marks on x-axis (thinned when too many)
-                {
+                // Offset tick marks on x-axis (thinned when too many, hidden in date mode)
+                if show_offset_ticks {{
                     let mut tick_offsets: Vec<i64> = series_points.iter()
                         .flat_map(|(_, _, pts)| pts.iter().map(|(o, _)| *o))
                         .collect();
@@ -237,7 +238,7 @@ pub fn AnalyticsChart(
                             }
                         }
                     }
-                }
+                }}
 
                 // Data series
                 for (idx, _label, points) in series_points.iter() {

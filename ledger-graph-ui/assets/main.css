@@ -601,6 +601,36 @@ html, body {
     min-width: 32px;
 }
 
+.view-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #0f3460;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 6px 12px;
+    background: transparent;
+    color: #888;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+}
+
+.toggle-btn:hover {
+    color: #ccc;
+}
+
+.toggle-active {
+    background: #4A90D9 !important;
+    color: #fff !important;
+}
+
 .zoom-presets {
     display: flex;
     gap: 6px;

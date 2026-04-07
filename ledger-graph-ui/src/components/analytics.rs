@@ -8,6 +8,82 @@ use crate::server::analytics::{
 use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet};
 
+/// Aggregate query results by date.
+/// ACS queries (label contains "ACS" or "Active Contract"): take the last value per date.
+/// All other queries: sum values per date.
+/// Returns data keyed by a synthetic "day index" so the chart can plot it.
+fn aggregate_by_date(
+    results: &HashMap<String, Vec<(i64, f64)>>,
+    offset_dates: &[(i64, String)],
+    active: &HashSet<String>,
+) -> (HashMap<String, Vec<(i64, f64)>>, Vec<(i64, String)>) {
+    // Build offset → date (YYYY-MM-DD) mapping
+    let offset_to_date: HashMap<i64, String> = offset_dates
+        .iter()
+        .map(|(o, d)| (*o, d[..10.min(d.len())].to_string()))
+        .collect();
+
+    // Collect all unique dates in order
+    let mut all_dates: Vec<String> = offset_dates
+        .iter()
+        .map(|(_, d)| d[..10.min(d.len())].to_string())
+        .collect();
+    all_dates.dedup();
+
+    // Map date → day_index (0, 1, 2, ...)
+    let date_to_idx: HashMap<&str, i64> = all_dates
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (d.as_str(), i as i64))
+        .collect();
+
+    let mut aggregated: HashMap<String, Vec<(i64, f64)>> = HashMap::new();
+
+    for (label, data) in results {
+        if !active.contains(label) {
+            continue;
+        }
+
+        let is_acs = label.contains("ACS") || label.contains("Active Contract");
+
+        // Group values by date
+        let mut date_values: HashMap<&str, Vec<f64>> = HashMap::new();
+        for &(offset, value) in data {
+            if let Some(date) = offset_to_date.get(&offset) {
+                date_values.entry(date.as_str()).or_default().push(value);
+            }
+        }
+
+        // Aggregate per date
+        let mut agg_data: Vec<(i64, f64)> = Vec::new();
+        for date in &all_dates {
+            if let Some(values) = date_values.get(date.as_str()) {
+                let agg_value = if is_acs {
+                    // Take the last value (latest offset for this date)
+                    *values.last().unwrap()
+                } else {
+                    // Sum all values
+                    values.iter().sum()
+                };
+                if let Some(&idx) = date_to_idx.get(date.as_str()) {
+                    agg_data.push((idx, agg_value));
+                }
+            }
+        }
+
+        aggregated.insert(label.clone(), agg_data);
+    }
+
+    // Build date labels: (day_index, date_string)
+    let date_labels: Vec<(i64, String)> = all_dates
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (i as i64, format!("{d}T00:00:00Z")))
+        .collect();
+
+    (aggregated, date_labels)
+}
+
 /// Compute zoom range from end_offset input, window_size, and known max offset.
 fn apply_window(
     end_offset_input: Signal<String>,
@@ -50,8 +126,7 @@ pub fn Analytics() -> Element {
     let mut zoom_range: Signal<Option<(i64, i64)>> = use_signal(|| None);
     let mut window_size = use_signal(|| 100i64);
     let mut end_offset_input = use_signal(String::new); // empty = latest
-    let mut window_size = use_signal(|| 100i64);
-    let mut end_offset_input = use_signal(String::new); // empty = latest
+    let mut date_mode = use_signal(|| false); // false = offset, true = date
     let mut loading_queries: Signal<HashSet<String>> = use_signal(HashSet::new);
     let mut query_errors: Signal<HashMap<String, String>> = use_signal(HashMap::new);
     let mut saved_queries: Signal<Vec<AnalyticsQuery>> = use_signal(Vec::new);
@@ -273,17 +348,50 @@ pub fn Analytics() -> Element {
             }
         }
         div { class: "analytics-center-panel",
-            AnalyticsChart {
-                query_results: query_results.read().clone(),
-                offset_dates: offset_dates.read().clone(),
-                active_queries: active_queries.read().clone(),
-                saved_queries: saved_queries.read().clone(),
-                zoom_range: zoom,
-                is_loading: !loading_queries.read().is_empty(),
+            {
+                let is_date = *date_mode.read();
+                let raw_results = query_results.read().clone();
+                let raw_dates = offset_dates.read().clone();
+                let active = active_queries.read().clone();
+                let saved = saved_queries.read().clone();
+                let loading = !loading_queries.read().is_empty();
+
+                let (chart_results, chart_dates, chart_zoom, show_offset_ticks) = if is_date {
+                    let (agg_results, agg_dates) = aggregate_by_date(&raw_results, &raw_dates, &active);
+                    // No zoom in date mode — show all dates
+                    (agg_results, agg_dates, None, false)
+                } else {
+                    (raw_results, raw_dates, zoom, true)
+                };
+
+                rsx! {
+                    AnalyticsChart {
+                        query_results: chart_results,
+                        offset_dates: chart_dates,
+                        active_queries: active,
+                        saved_queries: saved,
+                        zoom_range: chart_zoom,
+                        is_loading: loading,
+                        show_offset_ticks: show_offset_ticks,
+                    }
+                }
             }
         }
         div { class: "analytics-right-panel",
-            h3 { "Offset Window" }
+            div { class: "view-toggle",
+                button {
+                    class: if !*date_mode.read() { "toggle-btn toggle-active" } else { "toggle-btn" },
+                    onclick: move |_| date_mode.set(false),
+                    "Offset"
+                }
+                button {
+                    class: if *date_mode.read() { "toggle-btn toggle-active" } else { "toggle-btn" },
+                    onclick: move |_| date_mode.set(true),
+                    "Date"
+                }
+            }
+            if !*date_mode.read() {
+                h3 { "Offset Window" }
             div { class: "zoom-slider",
                 div { class: "zoom-row",
                     span { class: "zoom-label", "End offset:" }
@@ -366,6 +474,7 @@ pub fn Analytics() -> Element {
                         },
                         "Next >>"
                     }
+                }
                 }
             }
             h3 { "Actions" }
