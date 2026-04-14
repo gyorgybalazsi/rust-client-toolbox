@@ -1,30 +1,21 @@
-# Client toolbox for Canton
+# Client Toolbox for Canton
 
 ## Overview
 
-I decided to roll my own client toolbox so that I understand more the LAPI and the `.dalf` encoding of Daml models. 
+A Rust workspace for interacting with Canton/Daml ledgers: streaming events, generating Rust types from Daml models, syncing ledger state into Neo4j, and visualizing the event graph.
 
-Why Rust?
+Why Rust? Because it's not an officially supported client language, and building from scratch is the best way to understand the Ledger API and `.dalf` encoding.
 
-Because rust is cool, and it's not an officially supported client language. 
+## Prerequisites
 
-In early stage.
+- **Daml SDK** `3.4.8+`
+- **[protoc](https://protobuf.dev/installation/)** (Protocol Buffer Compiler)
+- **Docker Desktop** or **Neo4j Desktop** (for ledger-explorer and ledger-graph-ui)
+- **[just](https://github.com/casey/just)** command runner (optional, for convenience recipes)
 
-Main features planned:
+Add protoc to rust-analyzer in `.vscode/settings.json`:
 
-- Ledger viewer/ACS source, based on event graph handling and visualization (see my blog post: [A Daml ledger tells a story — it’s time to show it to everyone](https://discuss.daml.com/t/blog-post-a-daml-ledger-tells-a-story-it-s-time-to-show-it-to-everyone/6734))
-- Rust codegen (partly inspired by [Rust Bindings for Daml](https://github.com/fujiapple852/rust-daml-bindings))
-- etc.
-
-## Prerequisits
-
-DAMl SDK, version `3.4.8`
-
-[The Protocol Buffer Compiler (protoc)](https://protobuf.dev/installation/)
-
-The `.vscode/settings.json` file should contain the following:
-
-```
+```json
 {
     "rust-analyzer.server.extraEnv": {
         "PROTOC": "/usr/local/bin/protoc"
@@ -32,74 +23,82 @@ The `.vscode/settings.json` file should contain the following:
 }
 ```
 
-Docker Desktop or Neo4J desktop to run the ledger explorer.
+## Workspace Crates
 
-## Daml examples
+| Crate | Type | Description |
+|-------|------|-------------|
+| **ledger-api** | lib | Generated Protobuf/gRPC bindings for the Daml Ledger API v2 |
+| **client** | bin/lib | CLI and library wrapping Ledger API operations (streaming, JWT, party management) |
+| **codegen** | bin | Generates Rust structs from DAR packages, mirroring Daml template payloads and choice records |
+| **daml-type-rep** | lib | Type representations for Daml values (built-in types, numeric scaling, template IDs) |
+| **derive-lapi-access** | proc-macro | Derive macro implementing the `LapiAccess` trait for gRPC type conversions |
+| **ledger-explorer** | bin | Streams Canton events into Neo4j with resilient sync, batching, and configurable argument flattening |
+| **ledger-graph-ui** | bin | Dioxus fullstack web UI for visualizing the Neo4j event graph |
+| **submit** | lib | Library for submitting Daml contracts and exercising choices via gRPC |
+| **sandbox-init** | bin | CLI tool to start a Daml sandbox and run initialization scripts from DAR files |
+| **wallet** | lib | Placeholder for wallet functionality (not yet implemented) |
+| **test** | lib | Integration tests for the `LapiAccess` trait paired with Daml examples |
 
-Daml examples for testing can be found in the `_daml` folder. 
+### client CLI
 
-All test examples contain a Daml script which allocates some parties when started with the `Daml start` command.
+```
+cargo run -p client -- <subcommand> <params>
+```
 
-(Please note that including Daml script in Daml model packages is strongly discouraged in production.)
+| Subcommand | Description |
+|------------|-------------|
+| `get-ledger-end` | Get the ledger end offset |
+| `fake-access-token` | Create a fake access token for Sandbox |
+| `stream-updates` | Stream ledger updates for a party |
+| `stream-transactions` | Stream transactions for a party |
+| `parties` | List parties, optionally filtered by substring |
 
-One easy way to retrieve the Daml parties after starting Sandbox is the following:
-
-- Start the Canton console against Sandbox with the `daml canton-console` command.
-- Print the party IDs with the following Scala command: `sandbox.parties.list().map(_.party.toProtoPrimitive)`
-
-## Crates
-
-### client
-
-The `client` command is a wrapper around some fetures implemented in this project. 
-
-TODO: add more features.
-
-Either build it and run, other just run with `cargo run -p client -- <subcommand> <params>`.
-
-The subcommands are:
-
-| Subcommand | Description | Params |
-|------------|-------------|--------|
-| get-ledger-end | Get the ledger end | --url, --access-token |
-| fake-access-token | Create fake access token for Sandbox | --url, --party |
-| stream-updates | Stream ledger updates for a party | --url, --access-token, --party, --begin-exclusive, --end-inclusive (optional) |
-| stream-transactions | Stream transactions for a party | --url, --access-token, --party, --begin-exclusive, --end-inclusive (optional) |
-| parties | Get parties, optionally filtered by a substring | --url, --access-token, --filter (substring, optional) |
-
-The subcommand params can be get with the comand `cargo run -p client -- <subcommand> --help`.
-
-### codegen
-
-Contains code to generate Rust structs from a DAR package, mirroring the Daml template payload and choice input records. 
-
-Example: the `codegen/generated/ticketoffer_structs.rs` file contains Rust structs generated from the `_daml/daml-ticketoffer` package.
-
-TODO: implement a module structure in the generated Rust code, mirroring the input Daml code module structure.
-
-### derive-lapi-access
-
-Contains a derive macro which implements the `LapiAccess` trait.
-
-The `LapiAccess` trait contains type conversion functions for gRPC ledger API access.
-
-TODO: cover all Daml types.
-
-### test
-
-Contains tests for the `LapiAccess` trait, paired with the Daml examples in the `_daml` folder.
+Run `cargo run -p client -- <subcommand> --help` for parameter details.
 
 ### ledger-explorer
 
-An app which loads the event graph representation of a Canton ledger into a Neo4J graph DB instance. 
+Streams the Canton event graph into Neo4j with:
+- Resilient sync with automatic reconnection and exponential backoff
+- Keycloak OAuth2 authentication (client credentials or password grant)
+- Configurable argument flattening into dot-separated Neo4j properties
+- ACS (Active Contract Set) bootstrapping
+- Configurable batching, flush timeouts, and idle detection
+- Multi-profile config support (local, devnet, mainnet)
 
-The code to run the ledger explorer as contained in the `run-ledger-explorer` folder. 
+Configuration goes in `ledger-explorer/config/config.toml` (gitignored).
 
-See the `run-ledger-explorer/README.md` for instructions. 
+See also: [A Daml ledger tells a story](https://discuss.daml.com/t/blog-post-a-daml-ledger-tells-a-story-it-s-time-to-show-it-to-everyone/6734).
 
-TODO: 
+### codegen
 
-1. Logging
-2. Enhance payload representation using codegen
-3. Optionally include raw bytes of the original ledger content
+Generates Rust structs from DAR packages:
 
+```
+just codegen output.rs path/to/file.dar
+```
+
+Supports nested structs, modules, variants, enums, type aliases, and generics.
+
+## Running
+
+Common tasks are available as `just` recipes:
+
+```
+just                              # list all recipes
+just explorer-run                 # sync with Keycloak auth (release mode)
+just explorer-fresh               # fresh start: clear Neo4j + reload ACS
+just explorer-sandbox             # sync against local sandbox (fake JWT)
+just explorer-sandbox-fresh       # fresh start against local sandbox
+just explorer-stop                # stop the explorer process
+just codegen out.rs file.dar      # generate Rust types from a DAR
+just test-nested                  # run nested-test integration test
+just sandbox-init-ticketoffer     # init sandbox with ticketoffer example
+```
+
+## Daml Examples
+
+Test Daml models live in the `_daml/` folder. Each contains a Daml script that allocates parties when started with `daml start`.
+
+To retrieve party IDs after starting Sandbox:
+1. Start the Canton console: `daml canton-console`
+2. List parties: `sandbox.parties.list().map(_.party.toProtoPrimitive)`
