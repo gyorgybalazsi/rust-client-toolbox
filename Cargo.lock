@@ -2522,6 +2522,7 @@ dependencies = [
  "anyhow",
  "dioxus",
  "gloo-timers",
+ "js-sys",
  "neo4rs",
  "serde",
  "serde_json",
@@ -2529,6 +2530,8 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

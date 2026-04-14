@@ -1,13 +1,23 @@
+use crate::components::analytics::Analytics;
+use crate::components::sync_tab::SyncTab;
 use crate::components::graph_canvas::GraphCanvas;
 use crate::components::query_editor::QueryEditor;
 use crate::components::sidebar::Sidebar;
 use crate::components::toolbar::Toolbar;
 use crate::models::graph::{GraphData, NodeLabel, RelType};
+use crate::server::analytics::get_max_offset;
 use crate::state::graph_state::{Selection, Viewport};
 use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
+
+#[derive(Clone, Copy, PartialEq)]
+enum ActiveTab {
+    Graph,
+    Analytics,
+    Sync,
+}
 
 /// Given full graph data, compute which node indices belong to each transaction's
 /// subtree (BFS via ACTION/CONSEQUENCE edges from transaction root).
@@ -125,6 +135,21 @@ pub fn App() -> Element {
     let mut graph = use_signal(GraphData::default);
     let viewport = use_signal(Viewport::default);
     let mut selection = use_signal(Selection::default);
+    let mut active_tab = use_signal(|| ActiveTab::Graph);
+
+    // Graph tab offset window
+    let mut graph_window_size = use_signal(|| 100i64);
+    let mut graph_end_offset = use_signal(String::new); // empty = no filter
+    let mut graph_max_offset: Signal<Option<i64>> = use_signal(|| None);
+
+    // Fetch max offset for graph tab
+    let _graph_max = use_future(move || async move {
+        if let Ok(Some(max)) = get_max_offset().await {
+            graph_max_offset.set(Some(max));
+            // Set initial end offset to latest
+            graph_end_offset.set(max.to_string());
+        }
+    });
 
     // Replay state
     let mut full_data = use_signal(GraphData::default);
@@ -231,29 +256,154 @@ pub fn App() -> Element {
                     Toolbar { viewport }
                 }
             }
-            div { class: "main-content",
-                div { class: "left-panel",
-                    QueryEditor {
-                        on_result: on_result,
-                        on_replay: on_replay,
-                        on_step_start: on_step_start,
-                        on_step_next: on_step_next,
-                        is_stepping: is_replaying && !*auto_replay.read(),
+            div { class: "tab-bar",
+                button {
+                    class: if *active_tab.read() == ActiveTab::Graph { "tab-btn active" } else { "tab-btn" },
+                    onclick: move |_| active_tab.set(ActiveTab::Graph),
+                    "Graph"
+                }
+                button {
+                    class: if *active_tab.read() == ActiveTab::Analytics { "tab-btn active" } else { "tab-btn" },
+                    onclick: move |_| active_tab.set(ActiveTab::Analytics),
+                    "Analytics"
+                }
+                button {
+                    class: if *active_tab.read() == ActiveTab::Sync { "tab-btn active" } else { "tab-btn" },
+                    onclick: move |_| active_tab.set(ActiveTab::Sync),
+                    "Sync"
+                }
+            }
+            if *active_tab.read() == ActiveTab::Graph {
+                {
+                    // Compute offset bounds from window signals
+                    let end_str = graph_end_offset.read().clone();
+                    let win = *graph_window_size.read();
+                    let (gmin, gmax) = if end_str.is_empty() {
+                        (None, None)
+                    } else if let Some(v) = crate::models::analytics::parse_offset(&end_str) {
+                        if v <= 0 {
+                            // Negative = relative to max
+                            let max_off = graph_max_offset.read().unwrap_or(0);
+                            let end_off = max_off + v;
+                            (Some(end_off - win), Some(end_off))
+                        } else {
+                            (Some(v - win), Some(v))
+                        }
+                    } else {
+                        (None, None)
+                    };
+
+                    rsx! {
+                        div { class: "main-content",
+                            div { class: "left-panel",
+                                QueryEditor {
+                                    on_result: on_result,
+                                    on_replay: on_replay,
+                                    on_step_start: on_step_start,
+                                    on_step_next: on_step_next,
+                                    is_stepping: is_replaying && !*auto_replay.read(),
+                                    min_offset: gmin,
+                                    max_offset: gmax,
+                                }
+                            }
+                            div { class: "center-panel",
+                                GraphCanvas {
+                                    graph: graph.read().clone(),
+                                    viewport,
+                                    selection,
+                                }
+                            }
+                            div { class: "right-panel",
+                                div { class: "graph-offset-window",
+                                    h4 { "Offset Window" }
+                                    div { class: "zoom-slider",
+                                        div { class: "zoom-row",
+                                            span { class: "zoom-label", "End offset:" }
+                                            input {
+                                                r#type: "text",
+                                                class: "zoom-date-input",
+                                                placeholder: "all (no filter)",
+                                                value: "{graph_end_offset}",
+                                                oninput: move |evt| graph_end_offset.set(evt.value()),
+                                            }
+                                        }
+                                        div { class: "zoom-row",
+                                            span { class: "zoom-label", "Window:" }
+                                            input {
+                                                r#type: "text",
+                                                class: "zoom-date-input",
+                                                placeholder: "e.g. 100, 10K, 1M",
+                                                value: graph_window_size.read().to_string(),
+                                                oninput: move |evt| {
+                                                    if let Some(v) = crate::models::analytics::parse_offset(&evt.value()) {
+                                                        if v > 0 { graph_window_size.set(v); }
+                                                    }
+                                                },
+                                            }
+                                        }
+                                        div { class: "zoom-nav",
+                                            button {
+                                                class: "analytics-btn",
+                                                onclick: move |_| {
+                                                    if let Ok(max) = graph_max_offset.read().ok_or(()) {
+                                                        graph_end_offset.set(max.to_string());
+                                                    }
+                                                },
+                                                "Latest"
+                                            }
+                                            button {
+                                                class: "analytics-btn",
+                                                onclick: move |_| {
+                                                    let win = *graph_window_size.read();
+                                                    let current = graph_end_offset.read().clone();
+                                                    if let Some(v) = crate::models::analytics::parse_offset(&current) {
+                                                        let new_end = (v - win).max(win);
+                                                        graph_end_offset.set(new_end.to_string());
+                                                    }
+                                                },
+                                                "<< Prev"
+                                            }
+                                            button {
+                                                class: "analytics-btn",
+                                                onclick: move |_| {
+                                                    let win = *graph_window_size.read();
+                                                    let max_off = graph_max_offset.read().unwrap_or(i64::MAX);
+                                                    let current = graph_end_offset.read().clone();
+                                                    if let Some(v) = crate::models::analytics::parse_offset(&current) {
+                                                        let new_end = (v + win).min(max_off);
+                                                        graph_end_offset.set(new_end.to_string());
+                                                    }
+                                                },
+                                                "Next >>"
+                                            }
+                                        }
+                                    }
+                                }
+                                Sidebar {
+                                    graph: graph.read().clone(),
+                                    selection,
+                                }
+                                div { class: "nav-help",
+                                    h4 { "Navigation" }
+                                    div { class: "nav-help-items",
+                                        div { class: "nav-help-item", span { class: "nav-key", "Arrows" } " Pan" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "+" } " Zoom in" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "-" } " Zoom out" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "0" } " Reset view" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "Dbl-click" } " Center on point" }
+                                        div { class: "nav-help-item", span { class: "nav-key", "Drag" } " Pan" }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                div { class: "center-panel",
-                    GraphCanvas {
-                        graph: graph.read().clone(),
-                        viewport,
-                        selection,
-                    }
-                }
-                div { class: "right-panel",
-                    Sidebar {
-                        graph: graph.read().clone(),
-                        selection,
-                    }
-                }
+            }
+            if *active_tab.read() == ActiveTab::Analytics {
+                div { class: "main-content", Analytics {} }
+            }
+            if *active_tab.read() == ActiveTab::Sync {
+                div { class: "main-content", SyncTab {} }
             }
         }
     }

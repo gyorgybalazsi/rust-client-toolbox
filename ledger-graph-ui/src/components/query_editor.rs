@@ -10,9 +10,11 @@ pub fn QueryEditor(
     on_step_start: EventHandler<GraphData>,
     on_step_next: EventHandler<()>,
     is_stepping: bool,
+    min_offset: Option<i64>,
+    max_offset: Option<i64>,
 ) -> Element {
     let mut cypher = use_signal(|| {
-        "MATCH (t:Transaction)-[r]->(e) RETURN t, r, e LIMIT 50".to_string()
+        "MATCH (t:Transaction)\nWHERE t.offset >= $min_off AND t.offset <= $max_off\nAND EXISTS {\n  MATCH (t)-[:ACTION]->(e)\n  WHERE NOT (e:Exercised AND (e.choice_name CONTAINS 'Validator' OR e.choice_name = 'WalletAppInstall_ExecuteBatch'))\n}\nWITH t\nMATCH (t)-[r]->(e)\nRETURN t, r, e".to_string()
     });
     let mut error = use_signal(|| Option::<String>::None);
     let mut loading = use_signal(|| false);
@@ -22,7 +24,7 @@ pub fn QueryEditor(
         loading.set(true);
         error.set(None);
         spawn(async move {
-            match run_cypher(query, HashMap::new()).await {
+            match run_cypher(query, HashMap::new(), min_offset, max_offset).await {
                 Ok(data) => on_result.call(data),
                 Err(e) => error.set(Some(format!("{e}"))),
             }
@@ -35,7 +37,7 @@ pub fn QueryEditor(
         loading.set(true);
         error.set(None);
         spawn(async move {
-            match run_cypher(query, HashMap::new()).await {
+            match run_cypher(query, HashMap::new(), min_offset, max_offset).await {
                 Ok(data) => on_replay.call(data),
                 Err(e) => error.set(Some(format!("{e}"))),
             }
@@ -48,7 +50,7 @@ pub fn QueryEditor(
         loading.set(true);
         error.set(None);
         spawn(async move {
-            match run_cypher(query, HashMap::new()).await {
+            match run_cypher(query, HashMap::new(), min_offset, max_offset).await {
                 Ok(data) => on_step_start.call(data),
                 Err(e) => error.set(Some(format!("{e}"))),
             }
@@ -109,9 +111,56 @@ pub fn QueryEditor(
                 button {
                     class: "template-btn",
                     onclick: move |_| {
-                        cypher.set("MATCH (n)\nOPTIONAL MATCH path = (n)-[r]-(m)\nRETURN n, r, m\nLIMIT 100".to_string());
+                        cypher.set("MATCH (t:Transaction)\nWHERE t.offset >= $min_off AND t.offset <= $max_off\nAND EXISTS {\n  MATCH (t)-[:ACTION]->(e)\n  WHERE NOT (e:Exercised AND (e.choice_name CONTAINS 'Validator' OR e.choice_name = 'WalletAppInstall_ExecuteBatch'))\n}\nWITH t\nMATCH (t)-[r]->(e)\nRETURN t, r, e".to_string());
                     },
                     "Query All"
+                }
+            }
+            {
+                let mut tx_id = use_signal(String::new);
+                let mut tx_lookup = move |_| {
+                    let uid = tx_id.read().clone();
+                    if uid.is_empty() { return; }
+                    cypher.set(format!(
+                        "MATCH (t:Transaction {{update_id: '{uid}'}})\n\
+                         OPTIONAL MATCH (t)-[r1]->(e)\n\
+                         OPTIONAL MATCH (e)-[r2:CONSEQUENCE*0..]->(c)\n\
+                         OPTIONAL MATCH (p:Party)-[r3:REQUESTED]->(t)\n\
+                         RETURN t, r1, e, c, p, r3"
+                    ));
+                    // Auto-execute
+                    let query = cypher.read().clone();
+                    loading.set(true);
+                    error.set(None);
+                    spawn(async move {
+                        match run_cypher(query, HashMap::new(), min_offset, max_offset).await {
+                            Ok(data) => on_result.call(data),
+                            Err(e) => error.set(Some(format!("{e}"))),
+                        }
+                        loading.set(false);
+                    });
+                };
+                rsx! {
+                    div { class: "query-templates",
+                        h4 { "Transaction Lookup" }
+                        input {
+                            class: "cypher-input",
+                            r#type: "text",
+                            placeholder: "Enter update_id...",
+                            value: "{tx_id}",
+                            oninput: move |evt| tx_id.set(evt.value()),
+                            onkeydown: move |evt| {
+                                if evt.key() == Key::Enter {
+                                    tx_lookup(());
+                                }
+                            },
+                        }
+                        button {
+                            class: "template-btn",
+                            onclick: move |_| tx_lookup(()),
+                            "Lookup"
+                        }
+                    }
                 }
             }
         }

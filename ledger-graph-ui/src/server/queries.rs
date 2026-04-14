@@ -330,6 +330,8 @@ fn layout_tree(nodes: &mut [GraphNode], edges: &[GraphEdge]) {
 pub async fn run_cypher(
     cypher: String,
     params: HashMap<String, String>,
+    min_offset: Option<i64>,
+    max_offset: Option<i64>,
 ) -> Result<GraphData, ServerFnError> {
     use super::neo4j_pool;
 
@@ -352,6 +354,10 @@ RETURN null"#,
     for (k, v) in &params {
         query = query.param(k.as_str(), v.as_str());
     }
+    // Pass offset window as Neo4j parameters ($min_off, $max_off)
+    query = query
+        .param("min_off", min_offset.unwrap_or(i64::MIN))
+        .param("max_off", max_offset.unwrap_or(i64::MAX));
 
     let mut result = graph.execute(query).await.map_err(|e| {
         ServerFnError::new(format!("Neo4j query failed: {e}"))
