@@ -109,6 +109,7 @@ async fn main() -> Result<()> {
                 end_inclusive,
                 vec![party],
                 url,
+                None, // No template filters
             )
             .await?;
             while let Some(update) = stream.next().await {
@@ -133,6 +134,7 @@ async fn main() -> Result<()> {
                 end_inclusive,
                 vec![party],
                 url,
+                None, // No template filters
             )
             .await?;
             while let Some(Ok(response)) = stream.next().await {

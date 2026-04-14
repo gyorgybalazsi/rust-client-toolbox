@@ -121,6 +121,18 @@ pub struct Neo4jConfig {
     pub idle_timeout_secs: u64,
 }
 
+/// Template filter configuration with explicit field names.
+/// Uses the package-name reference format with "#" prefix.
+#[derive(Debug, Deserialize, Clone)]
+pub struct TemplateFilterConfig {
+    /// Package name with "#" prefix (e.g., "#splice-amulet")
+    pub package_name: String,
+    /// Dot-separated module name (e.g., "Splice.Amulet")
+    pub module_name: String,
+    /// Entity/template name (e.g., "FeaturedAppActivityMarker")
+    pub entity_name: String,
+}
+
 fn default_batch_size() -> usize {
     500
 }
@@ -138,6 +150,8 @@ pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
+    /// Optional list of contract templates to filter on.
+    pub template_filters: Option<Vec<TemplateFilterConfig>>,
     /// Starting offset for sync when Neo4j has no data.
     /// Positive value: absolute offset. Negative value: relative to ledger end (e.g., -5000000).
     /// If not specified, falls back to ledger pruning offset.

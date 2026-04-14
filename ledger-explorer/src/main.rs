@@ -5,6 +5,7 @@ use ledger_explorer::config;
 use ledger_explorer::sync::{run_resilient_sync, SyncConfig, BackoffConfig};
 use client::jwt::TokenSource;
 use client::stream_updates::stream_updates;
+use ledger_api::v2::Identifier;
 use tracing::{info, debug, warn};
 use tracing_subscriber::EnvFilter;
 use std::time::Instant;
@@ -30,6 +31,15 @@ enum Commands {
         begin_exclusive: i64,
         #[arg(long)]
         end_inclusive: Option<i64>,
+        /// Optional template filter package names (e.g., "#splice-amulet")
+        #[arg(long)]
+        template_package: Vec<String>,
+        /// Optional template filter module names (e.g., "Splice.Amulet")
+        #[arg(long)]
+        template_module: Vec<String>,
+        /// Optional template filter entity names (e.g., "FeaturedAppActivityMarker")
+        #[arg(long)]
+        template_entity: Vec<String>,
     },
     /// Benchmark raw Canton stream throughput (no Neo4j writes)
     Benchmark {
@@ -92,9 +102,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     match cli.command {
-        Commands::PrintCypher { access_token, url, begin_exclusive, end_inclusive, party } => {
+        Commands::PrintCypher { access_token, url, begin_exclusive, end_inclusive, party, template_package, template_module, template_entity } => {
             let parties = vec![party];
-            let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url).await?;
+            // Build Identifier list from parallel CLI args
+            let template_identifiers: Vec<Identifier> = template_package.into_iter()
+                .zip(template_module.into_iter())
+                .zip(template_entity.into_iter())
+                .map(|((package, module), entity)| Identifier {
+                    package_id: package,
+                    module_name: module,
+                    entity_name: entity,
+                })
+                .collect();
+            let template_filters: Option<&[Identifier]> = if template_identifiers.is_empty() { None } else { Some(&template_identifiers) };
+            let mut update_stream = stream_updates(Some(&access_token), begin_exclusive, end_inclusive, parties, url, template_filters).await?;
             while let Some(response) = update_stream.next().await {
                 let cypher_queries = cypher::get_updates_response_to_cypher(&response?, cypher::FlattenConfig::default());
                 println!("Start transaction");
@@ -116,6 +137,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
+            let template_filters = config.ledger.template_filters;
+            let template_identifiers: Vec<Identifier> = template_filters.unwrap_or_default().iter().map(|f| Identifier {
+                package_id: f.package_name.clone(),
+                module_name: f.module_name.clone(),
+                entity_name: f.entity_name.clone(),
+            }).collect();
+            let template_filter_arg: Option<&[Identifier]> = if template_identifiers.is_empty() { None } else { Some(&template_identifiers) };
 
             // Get token
             let token = if use_keycloak {
@@ -151,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Streaming {} updates from Canton (stream only, no cypher, no neo4j)...", count);
 
             // Benchmark 1: Raw stream only
-            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone()).await?;
+            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone(), template_filter_arg).await?;
             let start_time = Instant::now();
             let mut raw_count = 0u64;
             let mut last_offset = start_offset;
@@ -192,7 +220,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Benchmark 2: Stream + Cypher generation
             info!("\nStreaming {} updates with Cypher generation (no neo4j)...", count);
-            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone()).await?;
+            let mut update_stream = stream_updates(Some(&token), start_offset, None, parties.clone(), ledger_url.clone(), template_filter_arg).await?;
             let start_time = Instant::now();
             let mut cypher_count = 0u64;
             let mut total_queries = 0usize;
@@ -243,6 +271,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fake_jwt_user = config.ledger.fake_jwt_user;
             let configured_parties = config.ledger.parties.unwrap_or_default();
             let ledger_url = config.ledger.url;
+            let template_filters = config.ledger.template_filters;
             let starting_offset = config.ledger.starting_offset;
             let neo4j_uri = config.neo4j.uri.clone();
             let neo4j_user = config.neo4j.user.clone();
@@ -253,6 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ledger_url = %ledger_url,
                 neo4j_uri = %neo4j_uri,
                 parties = ?configured_parties,
+                template_filters = ?template_filters,
                 starting_offset = ?starting_offset,
                 "Configuration loaded"
             );
@@ -315,6 +345,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 neo4j_uri,
                 neo4j_user,
                 neo4j_pass,
+                template_filters,
                 starting_offset,
                 batch_size: config.neo4j.batch_size,
                 flush_timeout_secs: config.neo4j.flush_timeout_secs,

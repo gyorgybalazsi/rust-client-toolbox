@@ -3,14 +3,14 @@ use async_stream::stream;
 use futures::Stream;
 use ledger_api::v2::{
     state_service_client::StateServiceClient, CreatedEvent, EventFormat,
-    GetActiveContractsRequest,
+    GetActiveContractsRequest, Identifier,
 };
 use std::collections::HashMap;
 use std::pin::Pin;
 use tonic::metadata::MetadataValue;
 use tracing::{debug, info};
 
-use crate::utils::build_filters_by_party;
+use crate::utils::build_filters_by_party_with_identifiers;
 
 /// Represents an active contract from the ACS snapshot.
 #[derive(Debug, Clone)]
@@ -26,6 +26,7 @@ pub struct ActiveContract {
 /// * `active_at_offset` - The offset at which to query the ACS
 /// * `parties` - The parties whose visibility to use for querying
 /// * `url` - The gRPC endpoint URL of the ledger API
+/// * `template_filters` - Optional list of template identifiers to filter on
 ///
 /// Returns a stream of ActiveContract items.
 pub async fn stream_active_contracts(
@@ -33,10 +34,11 @@ pub async fn stream_active_contracts(
     active_at_offset: i64,
     parties: Vec<String>,
     url: String,
+    template_filters: Option<&[Identifier]>,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ActiveContract>> + Send>>> {
     info!(
-        "Starting stream_active_contracts: url={}, parties={:?}, active_at_offset={}",
-        url, parties, active_at_offset
+        "Starting stream_active_contracts: url={}, parties={:?}, active_at_offset={}, template_filters={:?}",
+        url, parties, active_at_offset, template_filters
     );
 
     debug!("Connecting to state service at {}", url);
@@ -45,7 +47,7 @@ pub async fn stream_active_contracts(
         .with_context(|| format!("Failed to connect to state service at {}", url))?
         .max_decoding_message_size(64 * 1024 * 1024);
 
-    let filters_by_party: HashMap<String, ledger_api::v2::Filters> = build_filters_by_party(&parties);
+    let filters_by_party: HashMap<String, ledger_api::v2::Filters> = build_filters_by_party_with_identifiers(&parties, template_filters);
     debug!("Built filters_by_party: {:?}", filters_by_party);
 
     let event_format = EventFormat {
