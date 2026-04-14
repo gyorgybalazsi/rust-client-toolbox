@@ -87,12 +87,30 @@ pub fn fake_jwt_for_user(
     format!("{}.{}", header_enc, payload_enc)
 }
 
-/// Configuration for Keycloak OAuth2 client credentials flow
+/// Authentication method for Keycloak
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "grant_type", rename_all = "snake_case")]
+pub enum KeycloakAuthMethod {
+    /// OAuth2 Client Credentials flow (service accounts)
+    ClientCredentials {
+        client_secret: String,
+    },
+    /// OAuth2 Resource Owner Password Credentials flow (user authentication)
+    Password {
+        username: String,
+        password: String,
+        #[serde(default)]
+        client_secret: Option<String>,
+    },
+}
+
+/// Configuration for Keycloak OAuth2 authentication
 #[derive(Debug, Clone, Deserialize)]
 pub struct KeycloakConfig {
     pub client_id: String,
-    pub client_secret: String,
     pub token_endpoint: String,
+    #[serde(flatten)]
+    pub auth_method: KeycloakAuthMethod,
 }
 
 /// Response from Keycloak token endpoint
@@ -105,13 +123,14 @@ struct KeycloakTokenResponse {
     token_type: Option<String>,
 }
 
-/// Fetches a real JWT token from Keycloak using OAuth2 client credentials flow.
+/// Fetches a real JWT token from Keycloak using OAuth2 authentication.
 ///
+/// Supports both client credentials and password grant flows.
 /// This is suitable for production environments where you need a properly signed JWT
 /// from a Keycloak server.
 ///
 /// # Arguments
-/// * `config` - Keycloak configuration containing client_id, client_secret, and token_endpoint
+/// * `config` - Keycloak configuration containing authentication details
 ///
 /// # Returns
 /// * `Result<String>` - The access token on success
@@ -124,11 +143,23 @@ pub async fn keycloak_jwt(config: &KeycloakConfig) -> Result<String> {
 
     let client = reqwest::Client::new();
 
-    let params = [
-        ("grant_type", "client_credentials"),
-        ("client_id", &config.client_id),
-        ("client_secret", &config.client_secret),
-    ];
+    // Build parameters based on authentication method
+    let mut params = vec![("client_id", config.client_id.clone())];
+
+    match &config.auth_method {
+        KeycloakAuthMethod::ClientCredentials { client_secret } => {
+            params.push(("grant_type", "client_credentials".to_string()));
+            params.push(("client_secret", client_secret.clone()));
+        }
+        KeycloakAuthMethod::Password { username, password, client_secret } => {
+            params.push(("grant_type", "password".to_string()));
+            params.push(("username", username.clone()));
+            params.push(("password", password.clone()));
+            if let Some(secret) = client_secret {
+                params.push(("client_secret", secret.clone()));
+            }
+        }
+    }
 
     let response = client
         .post(&config.token_endpoint)
@@ -168,6 +199,8 @@ struct KeycloakTokenResponseWithExpiry {
 }
 
 /// Fetches a JWT token from Keycloak and returns both the token and its expiry duration.
+///
+/// Supports both client credentials and password grant flows.
 pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String, u64)> {
     debug!(
         token_endpoint = %config.token_endpoint,
@@ -177,11 +210,23 @@ pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String
 
     let client = reqwest::Client::new();
 
-    let params = [
-        ("grant_type", "client_credentials"),
-        ("client_id", &config.client_id),
-        ("client_secret", &config.client_secret),
-    ];
+    // Build parameters based on authentication method
+    let mut params = vec![("client_id", config.client_id.clone())];
+
+    match &config.auth_method {
+        KeycloakAuthMethod::ClientCredentials { client_secret } => {
+            params.push(("grant_type", "client_credentials".to_string()));
+            params.push(("client_secret", client_secret.clone()));
+        }
+        KeycloakAuthMethod::Password { username, password, client_secret } => {
+            params.push(("grant_type", "password".to_string()));
+            params.push(("username", username.clone()));
+            params.push(("password", password.clone()));
+            if let Some(secret) = client_secret {
+                params.push(("client_secret", secret.clone()));
+            }
+        }
+    }
 
     let response = client
         .post(&config.token_endpoint)
@@ -208,7 +253,80 @@ pub async fn keycloak_jwt_with_expiry(config: &KeycloakConfig) -> Result<(String
 
     info!("Successfully obtained JWT token from Keycloak (expires in {} seconds)", token_response.expires_in);
 
+    // Log the decoded JWT claims for debugging
+    log_jwt_claims(&token_response.access_token);
+
     Ok((token_response.access_token, token_response.expires_in))
+}
+
+/// Decodes and logs the claims from a JWT token for debugging purposes.
+/// Only logs the payload (middle part), not the signature.
+pub fn log_jwt_claims(token: &str) {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        warn!("Invalid JWT format - cannot decode claims");
+        return;
+    }
+
+    // Decode the payload (second part)
+    match general_purpose::URL_SAFE_NO_PAD.decode(parts[1]) {
+        Ok(decoded) => {
+            match String::from_utf8(decoded) {
+                Ok(json_str) => {
+                    match serde_json::from_str::<serde_json::Value>(&json_str) {
+                        Ok(claims) => {
+                            info!("JWT claims: {}", serde_json::to_string_pretty(&claims).unwrap_or_else(|_| json_str.clone()));
+
+                            // Log specific important claims
+                            if let Some(sub) = claims.get("sub") {
+                                info!("  sub (subject): {}", sub);
+                            }
+                            if let Some(aud) = claims.get("aud") {
+                                info!("  aud (audience): {}", aud);
+                            }
+                            if let Some(scope) = claims.get("scope") {
+                                info!("  scope: {}", scope);
+                            }
+                            if let Some(act_as) = claims.get("actAs") {
+                                info!("  actAs (authorized parties): {}", act_as);
+                            }
+                            if let Some(read_as) = claims.get("readAs") {
+                                info!("  readAs (read-only parties): {}", read_as);
+                            }
+                            // Canton-specific claims
+                            if let Some(party) = claims.get("party") {
+                                info!("  party: {}", party);
+                            }
+                            if let Some(parties) = claims.get("parties") {
+                                info!("  parties: {}", parties);
+                            }
+                        }
+                        Err(e) => {
+                            debug!("JWT payload (raw): {}", json_str);
+                            warn!("Failed to parse JWT claims as JSON: {}", e);
+                        }
+                    }
+                }
+                Err(e) => warn!("JWT payload is not valid UTF-8: {}", e),
+            }
+        }
+        Err(e) => {
+            // Try with standard base64 padding
+            let padded = match parts[1].len() % 4 {
+                2 => format!("{}==", parts[1]),
+                3 => format!("{}=", parts[1]),
+                _ => parts[1].to_string(),
+            };
+            match general_purpose::STANDARD.decode(&padded) {
+                Ok(decoded) => {
+                    if let Ok(json_str) = String::from_utf8(decoded) {
+                        info!("JWT payload: {}", json_str);
+                    }
+                }
+                Err(_) => warn!("Failed to decode JWT payload: {}", e),
+            }
+        }
+    }
 }
 
 /// Token source configuration - determines how tokens are obtained

@@ -44,7 +44,8 @@ pub async fn stream_active_contracts(
     debug!("Connecting to state service at {}", url);
     let mut client = StateServiceClient::connect(url.clone())
         .await
-        .with_context(|| format!("Failed to connect to state service at {}", url))?;
+        .with_context(|| format!("Failed to connect to state service at {}", url))?
+        .max_decoding_message_size(64 * 1024 * 1024);
 
     let filters_by_party: HashMap<String, ledger_api::v2::Filters> = build_filters_by_party_with_identifiers(&parties, template_filters);
     debug!("Built filters_by_party: {:?}", filters_by_party);
@@ -75,7 +76,19 @@ pub async fn stream_active_contracts(
     let response = client
         .get_active_contracts(req)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to get active contracts from ledger: status={}, message={}", e.code(), e.message()))?;
+        .map_err(|e| {
+            tracing::error!(
+                "gRPC error getting active contracts: code={:?}, message={}, details={:?}",
+                e.code(),
+                e.message(),
+                e.details()
+            );
+            anyhow::anyhow!(
+                "Failed to get active contracts from ledger: {} (code: {:?})",
+                e.message(),
+                e.code()
+            )
+        })?;
 
     let mut grpc_stream = response.into_inner();
 

@@ -1,26 +1,99 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Top-level config file structure with profile support
 #[derive(Debug, Deserialize)]
+pub struct ConfigFile {
+    pub logging: LoggingConfig,
+    pub neo4j: Neo4jConfig,
+    /// The active profile name (can be overridden via CLI)
+    pub active_profile: String,
+    /// Named profiles containing ledger and keycloak settings
+    pub profiles: HashMap<String, ProfileConfig>,
+    /// Storage behavior settings
+    #[serde(default)]
+    pub storage: StorageConfig,
+}
+
+/// Controls how event data is stored in Neo4j
+#[derive(Debug, Deserialize, Clone)]
+pub struct StorageConfig {
+    /// Flatten create/choice arguments into dot-separated Neo4j node properties
+    #[serde(default = "default_true")]
+    pub flatten_arguments: bool,
+    /// Maximum recursion depth for flattening nested records
+    #[serde(default = "default_flatten_max_depth")]
+    pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as create_arguments_json / choice_argument_json properties
+    #[serde(default)]
+    pub store_arguments_json: bool,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            flatten_arguments: true,
+            flatten_max_depth: 10,
+            store_arguments_json: false,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_flatten_max_depth() -> usize {
+    10
+}
+
+/// A named profile containing environment-specific settings
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProfileConfig {
+    pub ledger: LedgerConfig,
+    pub keycloak: Option<KeycloakConfig>,
+}
+
+/// Resolved config after selecting a profile
+#[derive(Debug)]
 pub struct Config {
     pub logging: LoggingConfig,
     pub neo4j: Neo4jConfig,
     pub ledger: LedgerConfig,
-    /// Optional Keycloak configuration for obtaining real JWT tokens
     pub keycloak: Option<KeycloakConfig>,
+    pub storage: StorageConfig,
 }
 
-/// Keycloak OAuth2 configuration for client credentials flow
+/// Authentication method for Keycloak
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "grant_type", rename_all = "snake_case")]
+pub enum KeycloakAuthMethod {
+    /// OAuth2 Client Credentials flow (service accounts)
+    ClientCredentials {
+        client_secret: String,
+    },
+    /// OAuth2 Resource Owner Password Credentials flow (user authentication)
+    Password {
+        username: String,
+        password: String,
+        #[serde(default)]
+        client_secret: Option<String>,
+    },
+}
+
+/// Keycloak OAuth2 configuration
 #[derive(Debug, Deserialize, Clone)]
 pub struct KeycloakConfig {
     pub client_id: String,
-    pub client_secret: String,
     pub token_endpoint: String,
+    #[serde(flatten)]
+    pub auth_method: KeycloakAuthMethod,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
     pub level: String,
@@ -30,11 +103,22 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Neo4jConfig {
     pub uri: String,
     pub user: String,
     pub password: String,
+    /// Number of updates to batch before committing to Neo4j
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+    /// Flush timeout in seconds - commit even if batch isn't full after this duration
+    #[serde(default = "default_flush_timeout")]
+    pub flush_timeout_secs: u64,
+    /// Idle timeout in seconds - reconnect if no updates received for this duration
+    /// Detects dead/stale gRPC streams. Canton sends periodic OffsetCheckpoints,
+    /// so a live stream is never silent for long.
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
 }
 
 /// Template filter configuration with explicit field names.
@@ -49,30 +133,73 @@ pub struct TemplateFilterConfig {
     pub entity_name: String,
 }
 
-#[derive(Debug, Deserialize)]
+fn default_batch_size() -> usize {
+    500
+}
+
+fn default_flush_timeout() -> u64 {
+    1
+}
+
+fn default_idle_timeout() -> u64 {
+    60
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
     /// Optional list of contract templates to filter on.
     pub template_filters: Option<Vec<TemplateFilterConfig>>,
+    /// Starting offset for sync when Neo4j has no data.
+    /// Positive value: absolute offset. Negative value: relative to ledger end (e.g., -5000000).
+    /// If not specified, falls back to ledger pruning offset.
+    pub starting_offset: Option<i64>,
 }
 
-pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
+/// Read and parse the config file
+pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<ConfigFile> {
     let s = fs::read_to_string(&path)
         .with_context(|| format!("failed to read config file '{}'", path.as_ref().display()))?;
-    let cfg: Config = toml::from_str(&s).context("failed to parse TOML config")?;
+    let cfg: ConfigFile = toml::from_str(&s).context("failed to parse TOML config")?;
     Ok(cfg)
 }
 
-pub fn read_config_from_toml() -> Result<Config> {
+/// Read config file and resolve with the specified profile (or active_profile if None)
+pub fn read_config<P: AsRef<Path>>(path: P, profile: Option<&str>) -> Result<Config> {
+    let config_file = read_config_file(&path)?;
+    resolve_config(config_file, profile)
+}
+
+/// Resolve a ConfigFile into a Config using the specified profile
+pub fn resolve_config(config_file: ConfigFile, profile_override: Option<&str>) -> Result<Config> {
+    let profile_name = profile_override.unwrap_or(&config_file.active_profile);
+
+    let profile = config_file.profiles.get(profile_name)
+        .with_context(|| format!(
+            "profile '{}' not found. Available profiles: {:?}",
+            profile_name,
+            config_file.profiles.keys().collect::<Vec<_>>()
+        ))?;
+
+    Ok(Config {
+        logging: config_file.logging,
+        neo4j: config_file.neo4j,
+        ledger: profile.ledger.clone(),
+        keycloak: profile.keycloak.clone(),
+        storage: config_file.storage,
+    })
+}
+
+pub fn read_config_from_toml(profile: Option<&str>) -> Result<Config> {
     // Try multiple locations for config.toml:
     // 1. ./config/config.toml (relative to current working directory)
     // 2. CARGO_MANIFEST_DIR/config/config.toml (for cargo run)
 
     let cwd_config = std::path::PathBuf::from("config").join("config.toml");
     if cwd_config.exists() {
-        return read_config(&cwd_config);
+        return read_config(&cwd_config, profile);
     }
 
     if let Ok(crate_root) = std::env::var("CARGO_MANIFEST_DIR") {
@@ -80,11 +207,17 @@ pub fn read_config_from_toml() -> Result<Config> {
             .join("config")
             .join("config.toml");
         if cargo_config.exists() {
-            return read_config(&cargo_config);
+            return read_config(&cargo_config, profile);
         }
     }
 
     anyhow::bail!("Could not find config.toml in ./config/config.toml or CARGO_MANIFEST_DIR/config/config.toml. Use --config-file to specify a path.")
+}
+
+/// Helper to get available profile names from a config file
+pub fn list_profiles<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
+    let config_file = read_config_file(path)?;
+    Ok(config_file.profiles.keys().cloned().collect())
 }
 
 #[cfg(test)]
@@ -92,17 +225,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_read_config_from_toml_and_print()  -> Result<()>{
-        let cfg = read_config_from_toml().expect("failed to read config from toml");
+    fn test_read_config_from_toml_and_print() -> Result<()> {
+        let cfg = read_config_from_toml(None).expect("failed to read config from toml");
         println!("Parsed config: {:#?}", cfg);
         assert!(!cfg.neo4j.uri.is_empty());
         assert!(!cfg.neo4j.user.is_empty());
         assert!(!cfg.neo4j.password.is_empty());
         assert!(!cfg.ledger.fake_jwt_user.is_empty());
-        assert!(!cfg.ledger.url.is_empty());    
+        assert!(!cfg.ledger.url.is_empty());
         Ok(())
     }
 }
-
-
-
