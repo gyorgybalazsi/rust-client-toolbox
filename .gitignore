@@ -9,7 +9,6 @@ ledger-graph-ui/config.toml
 sync.log
 plans
 .claude/
-.tokensave/
 .superpowers/
 analytics-queries.local.toml
 docs/
