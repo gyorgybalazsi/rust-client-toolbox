@@ -43,8 +43,10 @@ pub struct View {
     pub description: DamlText,
 }
 
-const MAIN_PACKAGE_ID: &str = "35fcd7ce96d0691c435d35f11b0eef259601e7ca3a97d0c142e41bdcac164847";
-const ASSET_PACKAGE_ID: &str = "219bfb9f7a2978b3984883d4db63485b4ef9796b3515007525142b89b01d5498";
+// Package-name references (as the other tests use) instead of content-hash package ids,
+// which change with every rebuild/compiler version.
+const MAIN_PACKAGE_ID: &str = "#daml-interface-example-main";
+const ASSET_PACKAGE_ID: &str = "#daml-interface-example-interfaces";
 
 pub async fn create_iou(
     command_service_client: &mut CommandServiceClient<tonic::transport::Channel>,
@@ -141,6 +143,7 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::party_management::get_parties::get_parties;
+    use client::run_script::run_script;
     use client::testutils::start_sandbox;
     use client::upload_dar::upload_dars;
     use tokio;
@@ -150,7 +153,8 @@ mod tests {
         use tracing_subscriber::EnvFilter;
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("debug"))
-            .init();
+            .try_init()
+            .ok();
         tracing::info!("Logger initialized for test_create_iou_and_exercise_getview");
 
         let sandbox_port = 6865;
@@ -192,6 +196,19 @@ mod tests {
                     .join("daml-interface-example-main-1.0.0.dar"),
             ],
         ).await?;
+
+        // Allocate Alice and Bob. `dpm sandbox` does not run the package's `init-script`,
+        // and this must come after the interface/main DARs it depends on were uploaded.
+        let test_dar = std::path::PathBuf::from(&crate_root)
+            .join("..")
+            .join("_daml")
+            .join("daml-interface-example")
+            .join("test")
+            .join(".daml")
+            .join("dist")
+            .join("daml-interface-example-test-1.0.0.dar");
+        let script_result = run_script("localhost", sandbox_port, &test_dar, "Test:test")?;
+        info!("Setup script result: {}", script_result);
 
         // Setup test values
         let alice_user = "alice_user";

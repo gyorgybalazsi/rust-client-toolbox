@@ -151,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_dar_files() -> anyhow::Result<()> {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt().try_init();
 
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 

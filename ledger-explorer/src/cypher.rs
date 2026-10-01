@@ -5,7 +5,28 @@ use client::utils::{
 use ledger_api::v2::{CreatedEvent, GetUpdatesResponse, get_updates_response::Update, event::Event};
 use neo4rs::{Query, BoltType};
 use serde_json::json;
-use crate::api_record_to_json::{api_record_to_json, choice_argument_json};
+use crate::api_record_to_json::{
+    api_record_to_json, choice_argument_json, flatten_record_to_properties,
+    flatten_value_to_properties,
+};
+
+/// Configuration for argument storage in Cypher generation
+#[derive(Debug, Clone, Copy)]
+pub struct FlattenConfig {
+    pub enabled: bool,
+    pub max_depth: usize,
+    pub store_arguments_json: bool,
+}
+
+impl Default for FlattenConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_depth: 10,
+            store_arguments_json: false,
+        }
+    }
+}
 
 /// Wrapper around neo4rs::Query that preserves the cypher string and params for debugging
 #[derive(Clone)]
@@ -78,7 +99,10 @@ macro_rules! cypher_query {
 /// Converts a GetUpdatesResponse directly into a Vec of Cypher statements.
 /// Uses UNWIND for batched operations to minimize round-trips.
 /// Returns an empty vector if update is None or not a Transaction.
-pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<CypherQuery> {
+pub fn get_updates_response_to_cypher(
+    response: &GetUpdatesResponse,
+    flatten: FlattenConfig,
+) -> Vec<CypherQuery> {
     let mut cypher_statements = Vec::new();
 
     let Some(update) = &response.update else {
@@ -176,19 +200,20 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                         dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
                     })
                     .unwrap_or_default();
-                let create_arguments_json = created
-                    .create_arguments
-                    .as_ref()
-                    .map(|args| api_record_to_json(args))
-                    .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
-                let create_arguments = created
-                    .create_arguments
-                    .as_ref()
-                    .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
+                let flattened_args: serde_json::Value = if flatten.enabled {
+                    created
+                        .create_arguments
+                        .as_ref()
+                        .map(|args| {
+                            let props = flatten_record_to_properties(args, "create_arg.", flatten.max_depth);
+                            serde_json::Value::Object(props.into_iter().collect())
+                        })
+                        .unwrap_or(json!({}))
+                } else {
+                    json!({})
+                };
 
-                created_events.push(json!({
+                let mut event = json!({
                     "contract_id": created.contract_id,
                     "template_name": template_name,
                     "label": label,
@@ -196,9 +221,24 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                     "offset": created.offset,
                     "node_id": created.node_id,
                     "created_at": created_at,
-                    "create_arguments": create_arguments,
-                    "create_arguments_json": create_arguments_json
-                }));
+                    "flattened_args": flattened_args
+                });
+                if flatten.store_arguments_json {
+                    let create_arguments_json = created
+                        .create_arguments
+                        .as_ref()
+                        .map(api_record_to_json)
+                        .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string());
+                    let create_arguments = created
+                        .create_arguments
+                        .as_ref()
+                        .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string());
+                    event["create_arguments"] = json!(create_arguments);
+                    event["create_arguments_json"] = json!(create_arguments_json);
+                }
+                created_events.push(event);
             }
             Some(Event::Exercised(exercised)) => {
                 let label = format!("{}@{}", exercised.choice, exercised.offset);
@@ -217,15 +257,20 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                         dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
                     })
                     .unwrap_or_default();
-                let choice_argument_json_val = choice_argument_json(&exercised.choice_argument);
-                let choice_argument_json = serde_json::to_string(&choice_argument_json_val).unwrap_or("null".to_string());
-                let choice_argument = exercised
-                    .choice_argument
-                    .as_ref()
-                    .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
-                    .unwrap_or("null".to_string());
+                let flattened_args: serde_json::Value = if flatten.enabled {
+                    exercised
+                        .choice_argument
+                        .as_ref()
+                        .map(|arg| {
+                            let props = flatten_value_to_properties(arg, "choice_arg.", flatten.max_depth);
+                            serde_json::Value::Object(props.into_iter().collect())
+                        })
+                        .unwrap_or(json!({}))
+                } else {
+                    json!({})
+                };
 
-                exercised_events.push(json!({
+                let mut event = json!({
                     "label": label,
                     "choice_name": choice_name,
                     "target_contract_id": exercised.contract_id,
@@ -236,9 +281,18 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
                     "result_contract_ids": serde_json::to_string(&extract_contract_ids_from_value(&exercised.exercise_result)).unwrap_or("[]".to_string()),
                     "last_descendant_node_id": exercised.last_descendant_node_id,
                     "transaction_effective_at": transaction_effective_at,
-                    "choice_argument": choice_argument,
-                    "choice_argument_json": choice_argument_json
-                }));
+                    "flattened_args": flattened_args
+                });
+                if flatten.store_arguments_json {
+                    let choice_argument_json_val = choice_argument_json(&exercised.choice_argument);
+                    event["choice_argument"] = json!(exercised
+                        .choice_argument
+                        .as_ref()
+                        .map(|arg| serde_json::to_string(arg).unwrap_or("null".to_string()))
+                        .unwrap_or("null".to_string()));
+                    event["choice_argument_json"] = json!(serde_json::to_string(&choice_argument_json_val).unwrap_or("null".to_string()));
+                }
+                exercised_events.push(event);
             }
             _ => {}
         }
@@ -246,7 +300,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
 
     // Batch MERGE Created nodes (use contract_id as unique key to avoid duplicates)
     if !created_events.is_empty() {
-        let cypher = CypherQuery::new(
+        let mut created_cypher = String::from(
             "UNWIND $props AS p \
             MERGE (c:Created { contract_id: p.contract_id }) \
             ON CREATE SET \
@@ -255,16 +309,23 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             c.signatories = p.signatories, \
             c.offset = p.offset, \
             c.node_id = p.node_id, \
-            c.created_at = p.created_at, \
+            c.created_at = p.created_at"
+        );
+        if flatten.store_arguments_json {
+            created_cypher.push_str(", \
             c.create_arguments = p.create_arguments, \
-            c.create_arguments_json = p.create_arguments_json".to_string()
-        ).with_json_param("props", serde_json::Value::Array(created_events));
+            c.create_arguments_json = p.create_arguments_json");
+        }
+        created_cypher.push_str(" \
+            SET c += p.flattened_args");
+        let cypher = CypherQuery::new(created_cypher)
+            .with_json_param("props", serde_json::Value::Array(created_events));
         cypher_statements.push(cypher);
     }
 
     // Batch MERGE Exercised nodes (use offset + node_id as unique key to avoid duplicates)
     if !exercised_events.is_empty() {
-        let cypher = CypherQuery::new(
+        let mut exercised_cypher = String::from(
             "UNWIND $props AS p \
             MERGE (e:Exercised { offset: p.offset, node_id: p.node_id }) \
             ON CREATE SET \
@@ -275,10 +336,17 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
             e.consuming = p.consuming, \
             e.result_contract_ids = p.result_contract_ids, \
             e.last_descendant_node_id = p.last_descendant_node_id, \
-            e.transaction_effective_at = p.transaction_effective_at, \
+            e.transaction_effective_at = p.transaction_effective_at"
+        );
+        if flatten.store_arguments_json {
+            exercised_cypher.push_str(", \
             e.choice_argument = p.choice_argument, \
-            e.choice_argument_json = p.choice_argument_json".to_string()
-        ).with_json_param("props", serde_json::Value::Array(exercised_events));
+            e.choice_argument_json = p.choice_argument_json");
+        }
+        exercised_cypher.push_str(" \
+            SET e += p.flattened_args");
+        let cypher = CypherQuery::new(exercised_cypher)
+            .with_json_param("props", serde_json::Value::Array(exercised_events));
         cypher_statements.push(cypher);
     }
 
@@ -385,27 +453,26 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
     let mut requesting_parties: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for event in &transaction.events {
-        if let Some(Event::Exercised(exercised)) = &event.event {
-            if !child_node_ids.contains(&exercised.node_id) {
-                for party in &exercised.acting_parties {
-                    requesting_parties.insert(party.clone());
-                }
-                root_exercised.push(json!({
-                    "offset": offset,
-                    "node_id": exercised.node_id
-                }));
+        if let Some(Event::Exercised(exercised)) = &event.event
+            && !child_node_ids.contains(&exercised.node_id)
+        {
+            for party in &exercised.acting_parties {
+                requesting_parties.insert(party.clone());
             }
-        }
-        if let Some(Event::Created(created)) = &event.event {
-            if !child_node_ids.contains(&created.node_id) {
-                for party in &created.signatories {
-                    requesting_parties.insert(party.clone());
-                }
-                root_created.push(json!({
-                    "offset": offset,
-                    "node_id": created.node_id
-                }));
+            root_exercised.push(json!({
+                "offset": offset,
+                "node_id": exercised.node_id
+            }));
+        } else if let Some(Event::Created(created)) = &event.event
+            && !child_node_ids.contains(&created.node_id)
+        {
+            for party in &created.signatories {
+                requesting_parties.insert(party.clone());
             }
+            root_created.push(json!({
+                "offset": offset,
+                "node_id": created.node_id
+            }));
         }
     }
 
@@ -461,7 +528,7 @@ pub fn get_updates_response_to_cypher(response: &GetUpdatesResponse) -> Vec<Cyph
 /// Converts a CreatedEvent (from ACS) into Cypher statements to create a Created node.
 /// The offset is set to -1 to indicate this is from ACS (pre-existing contract).
 /// The node_id is set to 0 since there's no transaction structure for ACS contracts.
-pub fn created_event_to_cypher(created: &CreatedEvent) -> Vec<CypherQuery> {
+pub fn created_event_to_cypher(created: &CreatedEvent, flatten: FlattenConfig) -> Vec<CypherQuery> {
     let mut cypher_statements = Vec::new();
 
     let label = created
@@ -488,20 +555,22 @@ pub fn created_event_to_cypher(created: &CreatedEvent) -> Vec<CypherQuery> {
             dt.map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
         })
         .unwrap_or_default();
-    let create_arguments_json = created
-        .create_arguments
-        .as_ref()
-        .map(|args| api_record_to_json(args))
-        .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
-        .unwrap_or("null".to_string());
-    let create_arguments = created
-        .create_arguments
-        .as_ref()
-        .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
-        .unwrap_or("null".to_string());
+    let flattened_args: serde_json::Value = if flatten.enabled {
+        created
+            .create_arguments
+            .as_ref()
+            .map(|args| {
+                let props = flatten_record_to_properties(args, "create_arg.", flatten.max_depth);
+                serde_json::Value::Object(props.into_iter().collect())
+            })
+            .unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
 
     // Use MERGE to avoid duplicates if contract already exists
-    cypher_statements.push(cypher_query!(
+    // SET c += $flattened_args runs on both CREATE and MATCH to backfill existing nodes
+    let mut cypher_str = String::from(
         "MERGE (c:Created { contract_id: $contract_id }) \
         ON CREATE SET \
         c.template_name = $template_name, \
@@ -510,19 +579,43 @@ pub fn created_event_to_cypher(created: &CreatedEvent) -> Vec<CypherQuery> {
         c.offset = $offset, \
         c.node_id = $node_id, \
         c.created_at = $created_at, \
+        c.from_acs = true"
+    );
+    if flatten.store_arguments_json {
+        cypher_str.push_str(", \
         c.create_arguments = $create_arguments, \
-        c.create_arguments_json = $create_arguments_json, \
-        c.from_acs = true",
-        contract_id = created.contract_id.clone(),
-        template_name = template_name.clone(),
-        label = label.clone(),
-        signatories = signatories_str.clone(),
-        offset = -1i64, // ACS contracts have no specific offset
-        node_id = 0i32,
-        created_at = created_at.clone(),
-        create_arguments = create_arguments,
-        create_arguments_json = create_arguments_json,
-    ));
+        c.create_arguments_json = $create_arguments_json");
+    }
+    cypher_str.push_str(" \
+        SET c += $flattened_args");
 
+    let mut query = CypherQuery::new(cypher_str)
+        .with_param("contract_id", created.contract_id.clone())
+        .with_param("template_name", template_name)
+        .with_param("label", label)
+        .with_param("signatories", signatories_str)
+        .with_param("offset", -1i64)
+        .with_param("node_id", 0i64)
+        .with_param("created_at", created_at)
+        .with_json_param("flattened_args", flattened_args);
+
+    if flatten.store_arguments_json {
+        let create_arguments = created
+            .create_arguments
+            .as_ref()
+            .map(|args| serde_json::to_string(args).unwrap_or("null".to_string()))
+            .unwrap_or("null".to_string());
+        let create_arguments_json = created
+            .create_arguments
+            .as_ref()
+            .map(api_record_to_json)
+            .map(|json| serde_json::to_string(&json).unwrap_or("null".to_string()))
+            .unwrap_or("null".to_string());
+        query = query
+            .with_param("create_arguments", create_arguments)
+            .with_param("create_arguments_json", create_arguments_json);
+    }
+
+    cypher_statements.push(query);
     cypher_statements
 }

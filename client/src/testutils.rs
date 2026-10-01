@@ -6,11 +6,25 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{Mutex, OwnedMutexGuard};
 use tracing::info;
+
+/// Every sandbox binds the same fixed ports (ledger API plus Canton's admin APIs),
+/// and `cargo test` runs the tests of one binary in parallel. Without serialization,
+/// concurrent sandboxes fail with `Failed to bind to address /127.0.0.1:6868`.
+fn sandbox_lock() -> Arc<Mutex<()>> {
+    static LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+    LOCK.get_or_init(|| Arc::new(Mutex::new(()))).clone()
+}
 
 /// Starts the Daml sandbox in the background.
 /// Returns Ok(SandboxGuard) if the process starts successfully.
+///
+/// Only one sandbox runs at a time per test process: this waits until the previous
+/// `SandboxGuard` has been dropped (which kills its sandbox) before starting.
 pub async fn start_sandbox(package_root: PathBuf, dar_path: PathBuf, sandbox_port: u16) -> Result<SandboxGuard> {
+    let lock = sandbox_lock().lock_owned().await;
     let mut child;
     unsafe {
         child = Command::new("dpm")
@@ -34,9 +48,15 @@ pub async fn start_sandbox(package_root: PathBuf, dar_path: PathBuf, sandbox_por
             .map_err(|e| anyhow::anyhow!("Failed to start sandbox: {}", e))?;
     }
 
-    wait_for_sandbox_ready(&mut child)?;
+    if let Err(e) = wait_for_sandbox_ready(&mut child) {
+        // Do not leak a half-started sandbox: it would keep the ports bound and
+        // break every test that runs after this one.
+        let _ = close_sandbox(&mut child);
+        return Err(e);
+    }
     let guard = SandboxGuard {
         child: Some(child),
+        _lock: lock,
     };
     Ok(guard)
 }
@@ -76,6 +96,9 @@ pub fn close_sandbox(child: &mut Child) -> anyhow::Result<()> {
 
 pub struct SandboxGuard {
     pub child: Option<std::process::Child>,
+    // Declared after `child`: fields drop in order after `Drop::drop`, so the sandbox
+    // is killed before the next test is allowed to start one.
+    _lock: OwnedMutexGuard<()>,
 }
 
 impl Drop for SandboxGuard {
@@ -93,9 +116,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_and_close_sandbox() {
-        tracing_subscriber::fmt::init();
-        let package_root = PathBuf::from("/Users/gyorgybalazsi/rust-client-toolbox/_daml/daml-asset");
-        let dar_path = PathBuf::from("/Users/gyorgybalazsi/rust-client-toolbox/_daml/daml-asset/.daml/dist/daml-asset-0.0.1.dar");
+        let _ = tracing_subscriber::fmt().try_init();
+        let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let package_root = PathBuf::from(&crate_root).join("..").join("_daml").join("daml-asset");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-asset-0.0.1.dar");
         let sandbox_port = 6865;
         let _guard = start_sandbox(package_root, dar_path, sandbox_port)
             .await

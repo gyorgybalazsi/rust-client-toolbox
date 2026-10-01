@@ -37,10 +37,11 @@ message SelfOrImportedPackageId {
     // belongs.
     Unit self_package_id = 1;
 
-    // An index into `interned_package_ids` of the Package containing
-    // this reference.
     // *Must be a valid interned package Id string*
     int32 imported_package_id_interned_str = 3;
+
+    // an index in the package's explicit import table
+    int32 package_import_id = 4;
   }
 }
 
@@ -258,6 +259,17 @@ message Type {
     repeated FieldWithType fields = 1;
   }
 
+  // Type Application
+  message TApp {
+    //type applications of shape "t1 t2"
+
+    // t1 in "t1 t2"
+    Type lhs = 1;
+
+    // t2 in "t1 t2"
+    Type rhs = 2;
+  }
+
   oneof Sum {
     Var var = 1;
     Con con = 2;
@@ -269,6 +281,10 @@ message Type {
     sint64 nat = 6;
     Syn syn = 7;
     int32 interned_type = 8;
+
+    // added in 2.dev, to replace local flattening (the lists of types on other
+    // nodes)
+    TApp tapp = 9;
   }
 
 }
@@ -364,9 +380,11 @@ enum BuiltinFunction {
   SECP256K1_BOOL = 68;
   HEX_TO_TEXT = 69;
   TEXT_TO_HEX = 70;
-  TEXT_TO_CONTRACT_ID = 71;
 
-  // Next id is 72.
+  SHA256_HEX = 71;
+  SECP256K1_WITH_ECDSA_BOOL = 72;
+
+  // Next id is 73.
 
   /* Dev Builtins */
   // We use fields above 1000 for dev features
@@ -383,6 +401,10 @@ enum BuiltinFunction {
   BIGNUMERIC_TO_TEXT = 2010;           // *Available in versions >= 2.dev*
 
   TYPE_REP_TYCON_NAME = 3011;          // *Available in versions >= 2.dev*
+
+  TEXT_TO_CONTRACT_ID = 4001;          // *Available in versions >= 2.dev*
+
+  SECP256K1_VALIDATE_KEY = 4002;       // *Available in versions >= 2.dev*
 }
 
 // Builtin literals
@@ -1342,6 +1364,10 @@ message PackageMetadata {
   UpgradedPackageId upgraded_package_id = 3; // *optional*
 }
 
+message PackageImports {
+  repeated string imported_packages = 1;
+}
+
 message Package {
   repeated Module modules = 1;
   repeated string interned_strings = 2;
@@ -1353,4 +1379,9 @@ message Package {
   repeated Type interned_types = 5;
   repeated Kind interned_kinds = 6; // *Available in versions >= 2.dev*
   repeated Expr interned_exprs = 7; // *Available in versions >= 2.dev*
+
+  oneof ImportsSum {
+    string no_imported_packages_reason = 8;  // *Available in versions >= 2.dev*
+    PackageImports package_imports = 9; // *Available in versions >= 2.dev*
+  }
 }

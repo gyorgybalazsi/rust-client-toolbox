@@ -1,7 +1,7 @@
 use ledger_api::v2::Value;
 
 use ledger_api::v2::{
-    Filters, WildcardFilter,
+    CumulativeFilter, Filters, Identifier, TemplateFilter, WildcardFilter,
 };
 use std::collections::HashMap;
 
@@ -26,21 +26,56 @@ pub fn extract_contract_ids_from_value(value: &Option<Value>) -> Vec<String> {
 }
 
 /// Helper function to build filters_by_party for a list of parties.
+/// Uses wildcard filter to match all templates.
 pub fn build_filters_by_party(parties: &[String]) -> HashMap<String, Filters> {
+    build_filters_by_party_with_identifiers(parties, None)
+}
+
+/// Helper function to build filters_by_party for a list of parties with optional template filtering.
+/// If template_filters is Some and non-empty, creates TemplateFilter entries.
+/// If template_filters is None or empty, uses WildcardFilter to match all templates.
+pub fn build_filters_by_party_with_identifiers(
+    parties: &[String],
+    template_filters: Option<&[Identifier]>,
+) -> HashMap<String, Filters> {
     let mut filters_by_party = HashMap::new();
-    for party in parties {
-        filters_by_party.insert(
-            party.clone(),
-            Filters {
-                cumulative: vec![ledger_api::v2::CumulativeFilter {
+
+    let cumulative_filters: Vec<CumulativeFilter> = match template_filters {
+        Some(identifiers) if !identifiers.is_empty() => {
+            // Create a TemplateFilter for each specified template
+            identifiers
+                .iter()
+                .map(|identifier| CumulativeFilter {
                     identifier_filter: Some(
-                        ledger_api::v2::cumulative_filter::IdentifierFilter::WildcardFilter(
-                            WildcardFilter {
+                        ledger_api::v2::cumulative_filter::IdentifierFilter::TemplateFilter(
+                            TemplateFilter {
+                                template_id: Some(identifier.clone()),
                                 include_created_event_blob: true,
                             },
                         ),
                     ),
-                }],
+                })
+                .collect()
+        }
+        _ => {
+            // Use wildcard filter to match all templates
+            vec![CumulativeFilter {
+                identifier_filter: Some(
+                    ledger_api::v2::cumulative_filter::IdentifierFilter::WildcardFilter(
+                        WildcardFilter {
+                            include_created_event_blob: true,
+                        },
+                    ),
+                ),
+            }]
+        }
+    };
+
+    for party in parties {
+        filters_by_party.insert(
+            party.clone(),
+            Filters {
+                cumulative: cumulative_filters.clone(),
             },
         );
     }

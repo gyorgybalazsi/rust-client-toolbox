@@ -5,12 +5,14 @@ use tracing::{debug, error, info, warn};
 use anyhow::Result;
 use neo4rs::{Graph, query};
 use std::time::Instant;
+use ledger_api::v2::Identifier;
 
 use client::jwt::{TokenManager, TokenSource};
 use client::stream_updates::stream_updates;
 use client::active_contracts::stream_active_contracts;
 use client::ledger_end::{get_pruning_offset, get_ledger_end};
 use crate::cypher;
+use crate::config::TemplateFilterConfig;
 use crate::graph::{apply_cypher_vec_stream_to_neo4j, get_last_processed_offset};
 
 /// Configuration for the resilient sync process
@@ -20,6 +22,9 @@ pub struct SyncConfig {
     pub neo4j_uri: String,
     pub neo4j_user: String,
     pub neo4j_pass: String,
+    /// Optional list of contract templates to filter on.
+    /// If empty or None, all templates are included.
+    pub template_filters: Option<Vec<TemplateFilterConfig>>,
     /// Starting offset when Neo4j has no data. If None, falls back to pruning offset.
     pub starting_offset: Option<i64>,
     /// Number of updates to batch before committing to Neo4j
@@ -28,6 +33,25 @@ pub struct SyncConfig {
     pub flush_timeout_secs: u64,
     /// Idle timeout in seconds - reconnect if no updates received for this duration
     pub idle_timeout_secs: u64,
+    /// Flatten create/choice arguments into dot-separated Neo4j node properties
+    pub flatten_arguments: bool,
+    /// Maximum recursion depth for flattening nested records
+    pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as Neo4j properties
+    pub store_arguments_json: bool,
+}
+
+impl SyncConfig {
+    /// Converts template_filters to a Vec<Identifier> for use with the client library.
+    pub fn get_template_identifiers(&self) -> Option<Vec<Identifier>> {
+        self.template_filters.as_ref().map(|filters| {
+            filters.iter().map(|f| Identifier {
+                package_id: f.package_name.clone(),
+                module_name: f.module_name.clone(),
+                entity_name: f.entity_name.clone(),
+            }).collect()
+        })
+    }
 }
 
 /// Exponential backoff configuration
@@ -66,7 +90,7 @@ async fn ensure_indexes(neo4j_uri: &str, neo4j_user: &str, neo4j_pass: &str) -> 
     ];
 
     for index_query in &indexes {
-        match graph.run(query(*index_query)).await {
+        match graph.run(query(index_query)).await {
             Ok(_) => debug!("Index ensured: {}", index_query),
             Err(e) => warn!("Failed to create index (may already exist): {} - {}", index_query, e),
         }
@@ -89,8 +113,10 @@ async fn load_acs_to_neo4j(
     parties: &[String],
     token: &str,
     acs_offset: i64,
+    template_filters: Option<&[Identifier]>,
+    flatten_config: cypher::FlattenConfig,
 ) -> Result<()> {
-    info!("Loading Active Contract Set (ACS) into Neo4j at offset {}...", acs_offset);
+    info!("Loading Active Contract Set (ACS) into Neo4j at offset {}, template_filters={:?}...", acs_offset, template_filters);
     let start_time = Instant::now();
 
     // Connect to Neo4j
@@ -102,6 +128,7 @@ async fn load_acs_to_neo4j(
         acs_offset,
         parties.to_vec(),
         ledger_url.to_string(),
+        template_filters,
     ).await?;
 
     let mut contract_count = 0u64;
@@ -111,14 +138,14 @@ async fn load_acs_to_neo4j(
     while let Some(contract_result) = acs_stream.next().await {
         match contract_result {
             Ok(contract) => {
-                let queries = cypher::created_event_to_cypher(&contract.created_event);
+                let queries = cypher::created_event_to_cypher(&contract.created_event, flatten_config);
                 batch_queries.extend(queries.into_iter().map(|cq| cq.query));
                 contract_count += 1;
 
                 // Commit in batches
                 if batch_queries.len() >= BATCH_SIZE {
                     let mut txn = graph.start_txn().await?;
-                    let queries_to_run: Vec<neo4rs::Query> = batch_queries.drain(..).collect();
+                    let queries_to_run: Vec<neo4rs::Query> = std::mem::take(&mut batch_queries);
                     txn.run_queries(queries_to_run).await?;
                     txn.commit().await?;
                     debug!("Committed batch of ACS contracts, total so far: {}", contract_count);
@@ -212,6 +239,12 @@ pub async fn run_resilient_sync(
     // Ensure indexes exist before starting sync
     ensure_indexes(&sync_config.neo4j_uri, &sync_config.neo4j_user, &sync_config.neo4j_pass).await?;
 
+    let flatten_config = cypher::FlattenConfig {
+        enabled: sync_config.flatten_arguments,
+        max_depth: sync_config.flatten_max_depth,
+        store_arguments_json: sync_config.store_arguments_json,
+    };
+
     let token_manager = Arc::new(TokenManager::new(token_source));
 
     // Start background token refresh
@@ -279,12 +312,10 @@ pub async fn run_resilient_sync(
                 } else {
                     "rate: stalled".to_string()
                 }
+            } else if let Some(end) = ledger_end {
+                format!("ledger end: {}, remaining: {}", end, end - current_offset)
             } else {
-                if let Some(end) = ledger_end {
-                    format!("ledger end: {}, remaining: {}", end, end - current_offset)
-                } else {
-                    "calculating...".to_string()
-                }
+                "calculating...".to_string()
             };
 
             info!("[Progress] Neo4j offset: {}, {}", current_offset, rate_info);
@@ -424,6 +455,9 @@ pub async fn run_resilient_sync(
             }
         };
 
+        // Get template identifiers for this iteration
+        let template_identifiers = sync_config.get_template_identifiers();
+
         // Load ACS on first run if not already loaded (at the starting offset)
         if !acs_loaded_checked {
             match is_acs_loaded(
@@ -445,6 +479,8 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        template_identifiers.as_deref(),
+                        flatten_config,
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -471,6 +507,8 @@ pub async fn run_resilient_sync(
                         &sync_config.parties,
                         &token,
                         begin_offset,
+                        template_identifiers.as_deref(),
+                        flatten_config,
                     ).await {
                         Ok(()) => {
                             info!("ACS loaded successfully");
@@ -490,7 +528,7 @@ pub async fn run_resilient_sync(
             }
         }
 
-        info!("Starting stream from offset {}", begin_offset);
+        info!("Starting stream from offset {}, template_filters={:?}", begin_offset, sync_config.template_filters);
 
         // Start the update stream
         let update_stream = match stream_updates(
@@ -499,6 +537,7 @@ pub async fn run_resilient_sync(
             None,
             sync_config.parties.clone(),
             sync_config.ledger_url.clone(),
+            template_identifiers.as_deref(),
         ).await {
             Ok(stream) => stream,
             Err(e) => {
@@ -543,7 +582,7 @@ pub async fn run_resilient_sync(
                     ledger_api::v2::get_updates_response::Update::TopologyTransaction(t) => t.offset,
                 });
                 debug!(offset = ?offset, "Processing update from stream");
-                cypher::get_updates_response_to_cypher(&response)
+                cypher::get_updates_response_to_cypher(&response, flatten_config)
             });
 
         // Apply to Neo4j - this will return when the stream ends or errors

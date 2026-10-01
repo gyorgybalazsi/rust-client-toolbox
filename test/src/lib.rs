@@ -4,4 +4,5 @@ pub mod ticketoffer_explicit_disclosure;
 pub mod interface_example;
 pub mod full;
 pub mod optional;
+pub mod nested_test;
 

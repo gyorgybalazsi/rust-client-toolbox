@@ -121,13 +121,15 @@ mod tests {
     use super::*;
     use client::jwt::fake_jwt_for_user;
     use client::party_management::get_parties::get_parties;
+    use client::run_script::run_script;
     use client::testutils::start_sandbox;
+    use tracing::info;
     use tokio;
     use std::path::PathBuf;
 
     #[tokio::test]
     async fn test_create_and_transfer_cash() -> Result<()> {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt().try_init();
         let sandbox_port = 6865;
         let url = format!("http://localhost:{}", sandbox_port);
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -139,8 +141,19 @@ mod tests {
             .canonicalize()
             .unwrap();
 
-        let dar_path = package_root.join(".daml").join("dist").join("daml-ticketoffer-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-ticketoffer-0.0.1.dar");
+        let test_dar = package_root.join("test").join(".daml").join("dist").join("daml-ticketoffer-test-0.0.1.dar");
         let _guard = start_sandbox(package_root.clone(), dar_path, sandbox_port).await?;
+
+        // Seed parties/contracts: the old single-package layout ran the init
+        // script automatically; with multi-package it lives in the `test` package.
+        let script_result = run_script(
+            "localhost",
+            sandbox_port,
+            &test_dar,
+            "Test:setup",
+        )?;
+        info!("Setup script result: {}", script_result);
 
         // Setup test values
         let package_id = "#daml-ticketoffer".to_string();

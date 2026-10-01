@@ -137,7 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_transfer_cash() -> Result<()> {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt().try_init();
         let sandbox_port = 6865;
         let url = format!("http://localhost:{}", sandbox_port);
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -145,7 +145,7 @@ mod tests {
         let package_root = PathBuf::from(&crate_root)
             .join("..")
             .join("_daml")
-            .join("daml-ticketoffer")
+            .join("daml-ticketoffer-explicit-disclosure")
             .canonicalize()
             .unwrap();
 
@@ -163,7 +163,7 @@ mod tests {
         info!("Script result: {}", script_result);
 
         // Setup test values
-        let package_id = "#daml-ticketoffer".to_string();
+        let package_id = "#daml-ticketoffer-explicit-disclosure".to_string();
 
         let alice_user = "aliceuser";
         let alice_token = fake_jwt_for_user(alice_user);

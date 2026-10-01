@@ -135,15 +135,16 @@ mod tests {
             .canonicalize()
             .unwrap();
 
-        let dar_path = package_root.join(".daml").join("dist").join("daml-ticketoffer-0.0.1.dar");
-        let _guard = start_sandbox(package_root.clone(), dar_path.clone(), sandbox_port).await?;
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-ticketoffer-0.0.1.dar");
+        let test_dar = package_root.join("test").join(".daml").join("dist").join("daml-ticketoffer-test-0.0.1.dar");
+        let _guard = start_sandbox(package_root.clone(), dar_path, sandbox_port).await?;
 
-        // Run the setup script from the DAR
+        // Run the setup script from the test package's DAR
         let script_result = run_script(
             "localhost",
             sandbox_port,
-            &dar_path,
-            "Main:setup",
+            &test_dar,
+            "Test:setup",
         )?;
         info!("Script result: {}", script_result);
 

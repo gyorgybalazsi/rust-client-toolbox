@@ -102,7 +102,7 @@ mod tests {
             .join("..")
             .join("_daml")
             .join("daml-asset");
-        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-asset-0.0.1.dar");
         let sandbox_port = 6865;
 
         tracing::info!(?package_root, ?dar_path, sandbox_port, "Starting sandbox");

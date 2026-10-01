@@ -170,7 +170,7 @@ where
                     );
                     // Flush any pending queries before returning
                     if !pending_queries.is_empty() {
-                        let queries_to_flush: Vec<neo4rs::Query> = pending_queries.drain(..).collect();
+                        let queries_to_flush: Vec<neo4rs::Query> = std::mem::take(&mut pending_queries);
                         commit_with_retry(&graph, queries_to_flush).await?;
                         info!("Flushed {} pending queries before idle disconnect", updates_in_batch);
                     }

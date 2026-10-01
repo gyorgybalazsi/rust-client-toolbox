@@ -13,6 +13,41 @@ pub struct ConfigFile {
     pub active_profile: String,
     /// Named profiles containing ledger and keycloak settings
     pub profiles: HashMap<String, ProfileConfig>,
+    /// Storage behavior settings
+    #[serde(default)]
+    pub storage: StorageConfig,
+}
+
+/// Controls how event data is stored in Neo4j
+#[derive(Debug, Deserialize, Clone)]
+pub struct StorageConfig {
+    /// Flatten create/choice arguments into dot-separated Neo4j node properties
+    #[serde(default = "default_true")]
+    pub flatten_arguments: bool,
+    /// Maximum recursion depth for flattening nested records
+    #[serde(default = "default_flatten_max_depth")]
+    pub flatten_max_depth: usize,
+    /// Store raw JSON blob of arguments as create_arguments_json / choice_argument_json properties
+    #[serde(default)]
+    pub store_arguments_json: bool,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            flatten_arguments: true,
+            flatten_max_depth: 10,
+            store_arguments_json: false,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_flatten_max_depth() -> usize {
+    10
 }
 
 /// A named profile containing environment-specific settings
@@ -29,6 +64,7 @@ pub struct Config {
     pub neo4j: Neo4jConfig,
     pub ledger: LedgerConfig,
     pub keycloak: Option<KeycloakConfig>,
+    pub storage: StorageConfig,
 }
 
 /// Authentication method for Keycloak
@@ -85,6 +121,18 @@ pub struct Neo4jConfig {
     pub idle_timeout_secs: u64,
 }
 
+/// Template filter configuration with explicit field names.
+/// Uses the package-name reference format with "#" prefix.
+#[derive(Debug, Deserialize, Clone)]
+pub struct TemplateFilterConfig {
+    /// Package name with "#" prefix (e.g., "#splice-amulet")
+    pub package_name: String,
+    /// Dot-separated module name (e.g., "Splice.Amulet")
+    pub module_name: String,
+    /// Entity/template name (e.g., "FeaturedAppActivityMarker")
+    pub entity_name: String,
+}
+
 fn default_batch_size() -> usize {
     500
 }
@@ -102,6 +150,8 @@ pub struct LedgerConfig {
     pub fake_jwt_user: String,
     pub parties: Option<Vec<String>>,
     pub url: String,
+    /// Optional list of contract templates to filter on.
+    pub template_filters: Option<Vec<TemplateFilterConfig>>,
     /// Starting offset for sync when Neo4j has no data.
     /// Positive value: absolute offset. Negative value: relative to ledger end (e.g., -5000000).
     /// If not specified, falls back to ledger pruning offset.
@@ -138,6 +188,7 @@ pub fn resolve_config(config_file: ConfigFile, profile_override: Option<&str>) -
         neo4j: config_file.neo4j,
         ledger: profile.ledger.clone(),
         keycloak: profile.keycloak.clone(),
+        storage: config_file.storage,
     })
 }
 
