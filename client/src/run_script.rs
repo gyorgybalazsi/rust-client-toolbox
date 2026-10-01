@@ -133,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_script() -> Result<()> {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt().try_init();
 
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let script_dir = PathBuf::from(&crate_root)

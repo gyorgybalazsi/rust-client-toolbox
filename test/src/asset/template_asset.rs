@@ -211,9 +211,20 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
-        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
+        let test_dar = package_root.join("test").join(".daml").join("dist").join("daml-asset-test-0.0.1.dar");
         let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
+
+        // Seed parties/contracts: the old single-package layout ran the init
+        // script automatically; with multi-package it lives in the `test` package.
+        let script_result = run_script(
+            "localhost",
+            sandbox_port,
+            &test_dar,
+            "Test:setup",
+        )?;
+        info!("Setup script result: {}", script_result);
 
         // Setup test values
         let package_id = "#daml-asset".to_string();
@@ -265,7 +276,8 @@ mod tests {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("debug")) // or "debug", "trace", etc.
             .pretty()
-            .init();
+            .try_init()
+            .ok();
         let sandbox_port = 6865;
         let url = format!("http://localhost:{}", sandbox_port);
         let crate_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -277,16 +289,17 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
-        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
-        let _guard = start_sandbox(package_root, dar_path.clone(), sandbox_port).await?;
+        let test_dar = package_root.join("test").join(".daml").join("dist").join("daml-asset-test-0.0.1.dar");
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
-        // Run the setup script from the DAR
+        // Run the setup script from the test package's DAR
         let result = run_script(
             "localhost",
             sandbox_port,
-            &dar_path,
-            "Main:setup",
+            &test_dar,
+            "Test:setup",
         )?;
         info!("Script result: {}", result);
 
@@ -387,16 +400,17 @@ mod tests {
             .expect("Failed to canonicalize package_root");
 
         info!("Starting DAML sandbox at {}", package_root.display());
-        let dar_path = package_root.join(".daml").join("dist").join("daml-asset-0.0.1.dar");
+        let dar_path = package_root.join("main").join(".daml").join("dist").join("daml-asset-0.0.1.dar");
 
-        let _guard = start_sandbox(package_root, dar_path.clone(), sandbox_port).await?;
+        let test_dar = package_root.join("test").join(".daml").join("dist").join("daml-asset-test-0.0.1.dar");
+        let _guard = start_sandbox(package_root, dar_path, sandbox_port).await?;
 
-        // Run the setup script from the DAR
+        // Run the setup script from the test package's DAR
         let result = run_script(
             "localhost",
             sandbox_port,
-            &dar_path,
-            "Main:setup",
+            &test_dar,
+            "Test:setup",
         )?;
 
         info!("Script result: {}", result);
