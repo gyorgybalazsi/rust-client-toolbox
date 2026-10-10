@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
@@ -17,12 +17,12 @@ option java_package = "com.daml.ledger.api.v2";
 
 // Allows clients to read updates (transactions, (un)assignments, topology events) from the ledger.
 //
-// ``GetUpdates`` and ``GetUpdateTrees`` provide a comprehensive stream of updates/changes
+// ``GetUpdates`` provides a comprehensive stream of updates/changes
 // which happened on the virtual shared ledger. These streams are indexed with ledger
 // offsets, which are strictly increasing.
 // The virtual shared ledger consist of changes happening on multiple synchronizers which are
 // connected to the serving participant. Each update belongs to one synchronizer, this is
-// provided in the result (the ``synchronizer_id`` field in ``Transaction`` and ``TransactionTree``
+// provided in the result (the ``synchronizer_id`` field in ``Transaction``
 // for transactions, the ``source`` field in ``UnassignedEvent`` and the ``target`` field in ``AssignedEvent``).
 // Consumers can rely on strong causal guarantees on the virtual shared ledger for a single
 // synchronizer: updates which have greater offsets are happened after than updates with smaller
@@ -33,38 +33,8 @@ service UpdateService {
   // for individual events depends on the transaction shape chosen.
   //
   // - ACS delta: a requesting party must be a stakeholder of an event for it to be included.
-  // - ledger effects: a requesting party must be a witness of an en event for it to be included.
+  // - ledger effects: a requesting party must be a witness of an event for it to be included.
   rpc GetUpdates(GetUpdatesRequest) returns (stream GetUpdatesResponse);
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Read the ledger's complete transaction tree stream and related (un)assignments for a set of parties.
-  // The stream will be filtered only by the parties as wildcard parties.
-  // The template/interface filters describe the respective fields in the ``CreatedEvent`` results.
-  rpc GetUpdateTrees(GetUpdatesRequest) returns (stream GetUpdateTreesResponse);
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Lookup a transaction tree by its offset.
-  // For looking up a transaction instead of a transaction tree, please see GetTransactionByEventId
-  // If the transaction cannot be found for the request, or all the events are filtered, a TRANSACTION_NOT_FOUND error will be raised.
-  rpc GetTransactionTreeByOffset(GetTransactionByOffsetRequest) returns (GetTransactionTreeResponse);
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Lookup a transaction tree by its ID.
-  // For looking up a transaction instead of a transaction tree, please see GetTransactionById
-  // If the transaction cannot be found for the request, or all the events are filtered, a TRANSACTION_NOT_FOUND error will be raised.
-  rpc GetTransactionTreeById(GetTransactionByIdRequest) returns (GetTransactionTreeResponse);
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Lookup a transaction by its offset.
-  // If there is no transaction with this offset, or all the events are filtered, a TRANSACTION_NOT_FOUND error will be raised.
-  // Use a wildcard template filter if you want to retrieve any transaction visible to the parties you can read as.
-  rpc GetTransactionByOffset(GetTransactionByOffsetRequest) returns (GetTransactionResponse);
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Lookup a transaction by its ID.
-  // If there is no transaction with this id, or all the events are filtered, a TRANSACTION_NOT_FOUND error will be raised.
-  // Use a wildcard template filter if you want to retrieve any transaction visible to the parties you can read as.
-  rpc GetTransactionById(GetTransactionByIdRequest) returns (GetTransactionResponse);
 
   // Lookup an update by its offset.
   // If there is no update with this offset, or all the events are filtered, an UPDATE_NOT_FOUND error will be raised.
@@ -73,50 +43,62 @@ service UpdateService {
   // Lookup an update by its ID.
   // If there is no update with this ID, or all the events are filtered, an UPDATE_NOT_FOUND error will be raised.
   rpc GetUpdateById(GetUpdateByIdRequest) returns (GetUpdateResponse);
+
+  // Look up an update by its transaction hash.
+  // This is only available for updates received after upgrading to Canton version 3.6.
+  // If there is no update with this transaction hash, or all the events are filtered,
+  // or the update was populated before upgrading to Canton version 3.6, an UPDATE_NOT_FOUND error will be raised.
+  rpc GetUpdateByHash(GetUpdateByHashRequest) returns (GetUpdateResponse);
+
+  // Read a page of ledger's filtered updates. It returns the event types in accordance with
+  // the specified contents and filters.
+  // Additionally, the selection criteria for individual events depends on the transaction shape chosen.
+  //
+  // - ACS delta: an event is included only if the requesting party is a stakeholder.
+  // - ledger effects: an event is included if the requesting party is a witness.
+  rpc GetUpdatesPage(GetUpdatesPageRequest) returns (GetUpdatesPageResponse);
 }
 
 message GetUpdatesRequest {
-  // Beginning of the requested ledger section (non-negative integer).
+  // Exclusive lower bound offset of the requested ledger section (non-negative integer).
   // The response will only contain transactions whose offset is strictly greater than this.
-  // If zero, the stream will start from the beginning of the ledger.
-  // If positive, the streaming will start after this absolute offset.
-  // If the ledger has been pruned, this parameter must be specified and be greater than the pruning offset.
+  // If set to zero, the lower bound is set to the beginning of the ledger.
+  // If the participant has been pruned, this parameter must be greater or equal than the pruning offset.
+
+  // Required
   int64 begin_exclusive = 1;
 
-  // End of the requested ledger section.
-  // The response will only contain transactions whose offset is less than or equal to this.
-  // Optional, if empty, the stream will not terminate.
-  // If specified, the stream will terminate after this absolute offset (positive integer) is reached.
+  // Inclusive higher bound offset of the requested ledger section.
+  // If specified the response will only contain transactions whose offset is less than or equal to this.
+  // If not specified,
+  //
+  // - the descending_order must not be selected,
+  // - the stream will not terminate.
+  //
+  // Optional
   optional int64 end_inclusive = 2;
 
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // Requesting parties with template filters.
-  // Template filters must be empty for GetUpdateTrees requests.
-  // Optional for backwards compatibility, if defined update_format must be unset
-  TransactionFilter filter = 3;
+  reserved 3;
+  reserved "filter";
 
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // If enabled, values served over the API will contain more information than strictly necessary to interpret the data.
-  // In particular, setting the verbose flag to true triggers the ledger to include labels, record and variant type ids
-  // for record fields.
-  // Optional for backwards compatibility, if defined update_format must be unset
-  bool verbose = 4;
+  reserved 4;
+  reserved "verbose";
 
-  // Must be unset for GetUpdateTrees request.
-  // Optional for backwards compatibility for GetUpdates request: defaults to an UpdateFormat where:
+  // The update format for this request
   //
-  // - include_transactions.event_format.filters_by_party = the filter.filters_by_party on this request
-  // - include_transactions.event_format.filters_for_any_party = the filter.filters_for_any_party on this request
-  // - include_transactions.event_format.verbose = the same flag specified on this request
-  // - include_transactions.transaction_shape = TRANSACTION_SHAPE_ACS_DELTA
-  // - include_reassignments.filter = the same filter specified on this request
-  // - include_reassignments.verbose = the same flag specified on this request
-  // - include_topology_events.include_participant_authorization_events.parties = all the parties specified in filter
+  // Required
   UpdateFormat update_format = 5;
+
+  // If set, the stream will populate the elements in descending order.
+  //
+  // Optional
+  bool descending_order = 6;
 }
 
 message GetUpdatesResponse {
   // The update that matches the filter in the request.
+  //
+  // Required
   oneof update {
     Transaction transaction = 1;
     Reassignment reassignment = 2;
@@ -125,87 +107,15 @@ message GetUpdatesResponse {
   }
 }
 
-// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-message GetUpdateTreesResponse {
-  // The update that matches the filter in the request.
-  oneof update {
-    TransactionTree transaction_tree = 1;
-    Reassignment reassignment = 2;
-    OffsetCheckpoint offset_checkpoint = 3;
-  }
-}
-
-// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-message GetTransactionByOffsetRequest {
-  // The offset of the transaction being looked up.
-  // Must be a valid absolute offset (positive integer).
-  // Required
-  int64 offset = 1;
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // The parties whose events the client expects to see.
-  // Events that are not visible for the parties in this collection will not be present in the response.
-  // Each element must be a valid PartyIdString (as described in ``value.proto``).
-  // Must be set for GetTransactionTreeByOffset request.
-  // Optional for backwards compatibility for GetTransactionByOffset request: if defined transaction_format must be
-  // unset (falling back to defaults).
-  repeated string requesting_parties = 2;
-
-  // Must be unset for GetTransactionTreeByOffset request.
-  // Optional for GetTransactionByOffset request for backwards compatibility: defaults to a TransactionFormat, where:
-  //
-  // - event_format.filters_by_party will have template-wildcard filters for all the requesting_parties
-  // - event_format.filters_for_any_party is unset
-  // - event_format.verbose = true
-  // - transaction_shape = TRANSACTION_SHAPE_ACS_DELTA
-  TransactionFormat transaction_format = 3;
-}
-
-// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-message GetTransactionByIdRequest {
-  // The ID of a particular transaction.
-  // Must be a valid LedgerString (as described in ``value.proto``).
-  // Required
-  string update_id = 1;
-
-  // Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-  // The parties whose events the client expects to see.
-  // Events that are not visible for the parties in this collection will not be present in the response.
-  // Each element must be a valid PartyIdString (as described in ``value.proto``).
-  // Must be set for GetTransactionTreeById request.
-  // Optional for backwards compatibility for GetTransactionById request: if defined transaction_format must be
-  // unset (falling back to defaults).
-  repeated string requesting_parties = 2;
-
-  // Must be unset for GetTransactionTreeById request.
-  // Optional for GetTransactionById request for backwards compatibility: defaults to a transaction_format, where:
-  //
-  // - event_format.filters_by_party will have template-wildcard filters for all the requesting_parties
-  // - event_format.filters_for_any_party is unset
-  // - event_format.verbose = true
-  // - transaction_shape = TRANSACTION_SHAPE_ACS_DELTA
-  TransactionFormat transaction_format = 3;
-}
-
-// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-message GetTransactionTreeResponse {
-  // Required
-  TransactionTree transaction = 1;
-}
-
-// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0.
-message GetTransactionResponse {
-  // Required
-  Transaction transaction = 1;
-}
-
 message GetUpdateByOffsetRequest {
   // The offset of the update being looked up.
   // Must be a valid absolute offset (positive integer).
+  //
   // Required
   int64 offset = 1;
 
   // The format for the update.
+  //
   // Required
   UpdateFormat update_format = 2;
 }
@@ -213,19 +123,110 @@ message GetUpdateByOffsetRequest {
 message GetUpdateByIdRequest {
   // The ID of a particular update.
   // Must be a valid LedgerString (as described in ``value.proto``).
+  //
   // Required
   string update_id = 1;
 
   // The format for the update.
+  //
+  // Required
+  UpdateFormat update_format = 2;
+}
+
+message GetUpdateByHashRequest {
+  // The transaction hash to look up.
+  //
+  // Required: must be non-empty
+  bytes transaction_hash = 1;
+
+  // The format for the update.
+  //
   // Required
   UpdateFormat update_format = 2;
 }
 
 message GetUpdateResponse {
   // The update that matches the filter in the request.
+  //
+  // Required
   oneof update {
     Transaction transaction = 1;
     Reassignment reassignment = 2;
     TopologyTransaction topology_transaction = 3;
   }
+}
+
+message GetUpdatesPageRequest {
+  // Exclusive lower bound offset of the requested ledger section (non-negative integer).
+  // The response page will only contain updates whose offset is strictly greater than this.
+  // If set to zero or not defined, the lower bound is set to the actual pruning offset or to the beginning of the
+  // ledger if the participant was not pruned yet.
+  // If set to positive and the ledger has been pruned, this parameter must be greater or equal than the pruning offset.
+  //
+  // Optional
+  optional int64 begin_offset_exclusive = 1;
+
+  // Inclusive upper bound offset of the requested ledger section.
+  // If specified the response will only contain updates whose offset is less than or equal to this.
+  // If not specified response will only contain updates whose offset is less than the current ledger-end.
+  //
+  // Optional
+  optional int64 end_offset_inclusive = 2;
+
+  // The result page will contain the first max_page_size Updates of all matching updates.
+  // The server may reject queries with max_page_size above server specified limits.
+  // If not specified, the default max_page_size is determined by the server.
+  //
+  // Optional
+  optional int32 max_page_size = 3;
+
+  // Required
+  UpdateFormat update_format = 4;
+
+  //If set, the page will populate the elements in descending order starting from the end_offset_inclusive.
+  //
+  // Optional
+  bool descending_order = 5;
+
+  // To get the next page of updates, the ``page_token`` should be set to the
+  // ``next_page_token`` of the last ``GetUpdatesPageResponse``.
+  // To achieve correct paging: subsequent requests must
+  //
+  // - be executed on the same participant,
+  // - have the same begin_offset_exclusive,
+  // - have the same end_offset_inclusive,
+  // - have the same update_format and
+  // - have the same descending_order.
+  //
+  // If not specified, the first page of updates will be returned.
+  //
+  // Optional: can be empty
+  optional bytes page_token = 6;
+}
+
+message GetUpdatesPageResponse {
+  // The first max_page_size updates that match the filter in the request.
+  // In case descending_order was selected, the order of the updates is in reversed offset order.
+  //
+  // Optional: can be empty
+  repeated GetUpdateResponse updates = 1;
+
+  // Represents the lower bound of this page.
+  //
+  // Required
+  int64 lowest_page_offset_exclusive = 2;
+
+  // Represents the upper bound of the page.
+  //
+  // Required
+  int64 highest_page_offset_inclusive = 3;
+
+  // If the value is not populated, this is the last page.
+  // If the value is populated, this token can be used to get the next page.
+  // If the original ``GetFirstUpdatePageRequest`` end_offset_inclusive was not specified and the request uses
+  // ascending order, then this token will always be populated, so you can use it to "tail" the ledger by
+  // repeatedly polling with the new page token returned.
+  //
+  // Optional: can be empty
+  optional bytes next_page_token = 4;
 }

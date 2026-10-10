@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 // .proto representation of the first version of the Daml-LF language,
@@ -14,7 +14,6 @@
 //   the actual AST. This is to keep the message structure relatively flat
 //   and light.
 
-
 // Minor version history:
 // * 2.1 --  2024-03-18: Initial version
 // * dev (special staging area for the next version to be released)
@@ -22,8 +21,8 @@
 syntax = "proto3";
 package daml_lf_2;
 
-option java_package = "com.digitalasset.daml.lf.archive";;
 option csharp_namespace = "Com.DigitalAsset.Daml.Lf.Archive.DamlLf2";
+option java_package = "com.digitalasset.daml.lf.archive";
 
 // Canonical encoding in one-ofs for cases that carry no meaningful
 // values.
@@ -32,7 +31,6 @@ message Unit {}
 // Package id
 message SelfOrImportedPackageId {
   oneof Sum {
-
     // Reference to the package of which the package this reference
     // belongs.
     Unit self_package_id = 1;
@@ -78,7 +76,6 @@ message ValueId {
 
 // A field name definition in a record or a variant associated with a type.
 message FieldWithType {
-
   // *Must a valid interned identifier*
   int32 field_interned_str = 3;
 
@@ -88,7 +85,6 @@ message FieldWithType {
 
 // Binder associated with a type.
 message VarWithType {
-
   // *Must be a valid interned identifier*
   int32 var_interned_str = 3;
 
@@ -98,7 +94,6 @@ message VarWithType {
 
 // Type binder associated with a kind.
 message TypeVarWithKind {
-
   // *Must be a valid interned identifier*
   int32 var_interned_str = 3;
 
@@ -108,7 +103,6 @@ message TypeVarWithKind {
 
 // A field in a record with its value.
 message FieldWithExpr {
-
   // *Must be a valid interned identifier*
   int32 field_interned_str = 3;
 
@@ -126,7 +120,6 @@ message Binding {
 
 // Kinds
 message Kind {
-
   // The kind of polimorphic type.
   message Arrow {
     // parameter of the kind
@@ -202,10 +195,8 @@ enum BuiltinType {
 
 // Types
 message Type {
-
   // Possibly applied type variable 'TyVar'
   message Var {
-
     // *Must be a valid interned identifier*
     int32 var_interned_str = 3;
 
@@ -215,7 +206,6 @@ message Type {
 
   // Possibly applied type constructor 'TyCon'
   message Con {
-
     // Name of the type constructor name
     TypeConId tycon = 1;
 
@@ -225,7 +215,6 @@ message Type {
 
   // Fully applied type constructor 'TySyn'
   message Syn {
-
     // Name of the type synonym
     TypeSynId tysyn = 1;
 
@@ -235,7 +224,6 @@ message Type {
 
   // Possibly applied builtin types
   message Builtin {
-
     // Builtin type
     // FixMe: Rename
     BuiltinType builtin = 1;
@@ -286,7 +274,6 @@ message Type {
     // nodes)
     TApp tapp = 9;
   }
-
 }
 
 // Builtin constructors
@@ -302,7 +289,6 @@ enum BuiltinCon {
 // Builtin functions
 // Refer to Daml-LF major version 1 specification for types and behavior of those.
 enum BuiltinFunction {
-
   TRACE = 0;
   ERROR = 1;
 
@@ -383,33 +369,36 @@ enum BuiltinFunction {
 
   SHA256_HEX = 71;
   SECP256K1_WITH_ECDSA_BOOL = 72;
+  SECP256K1_VALIDATE_KEY = 73; // *Available in versions >= 2.3
+  EXTERNAL_CALL = 74; // *Available in versions >= 2.4*
 
-  // Next id is 73.
+  // Next id is 75.
 
   /* Dev Builtins */
   // We use fields above 1000 for dev features
 
-  SCALE_BIGNUMERIC = 2001;             // *Available in versions >= 2.dev*
-  PRECISION_BIGNUMERIC = 2002;         // *Available in versions >= 2.dev*
-  ADD_BIGNUMERIC = 2003;               // *Available in versions >= 2.dev*
-  SUB_BIGNUMERIC = 2004;               // *Available in versions >= 2.dev*
-  MUL_BIGNUMERIC = 2005;               // *Available in versions >= 2.dev*
-  DIV_BIGNUMERIC = 2006;               // *Available in versions >= 2.dev*
-  SHIFT_RIGHT_BIGNUMERIC = 2007;       // *Available in versions >= 2.dev*
-  BIGNUMERIC_TO_NUMERIC = 2008;        // *Available in versions >= 2.dev*
-  NUMERIC_TO_BIGNUMERIC = 2009;        // *Available in versions >= 2.dev*
-  BIGNUMERIC_TO_TEXT = 2010;           // *Available in versions >= 2.dev*
+  SCALE_BIGNUMERIC = 2001; // *Available in versions >= 2.dev*
+  PRECISION_BIGNUMERIC = 2002; // *Available in versions >= 2.dev*
+  ADD_BIGNUMERIC = 2003; // *Available in versions >= 2.dev*
+  SUB_BIGNUMERIC = 2004; // *Available in versions >= 2.dev*
+  MUL_BIGNUMERIC = 2005; // *Available in versions >= 2.dev*
+  DIV_BIGNUMERIC = 2006; // *Available in versions >= 2.dev*
+  SHIFT_RIGHT_BIGNUMERIC = 2007; // *Available in versions >= 2.dev*
+  BIGNUMERIC_TO_NUMERIC = 2008; // *Available in versions >= 2.dev*
+  NUMERIC_TO_BIGNUMERIC = 2009; // *Available in versions >= 2.dev*
+  BIGNUMERIC_TO_TEXT = 2010; // *Available in versions >= 2.dev*
 
-  TYPE_REP_TYCON_NAME = 3011;          // *Available in versions >= 2.dev*
+  TYPE_REP_TYCON_NAME = 3011; // *Available in versions >= 2.dev*
 
-  TEXT_TO_CONTRACT_ID = 4001;          // *Available in versions >= 2.dev*
+  //SECP256K1_VALIDATE_KEY = 4001; // REMAINS HERE TEMPORARELY TO PARSE CHECKED IN DARS
 
-  SECP256K1_VALIDATE_KEY = 4002;       // *Available in versions >= 2.dev*
+  // REMAINS HERE TEMPORARILY TO PARSE DARS FROM A damlc THAT STILL ENCODES THE OLD DEV ID;
+  // remove once the re-pinned damlc emits EXTERNAL_CALL = 74.
+  EXTERNAL_CALL_LEGACY_DEV = 5001;
 }
 
 // Builtin literals
 message BuiltinLit {
-
   // match java.math.BigDecimal.ROUND_XXX constants
   // *Available in versions >= 2.dev*
   enum RoundingMode {
@@ -449,7 +438,6 @@ message BuiltinLit {
 
 // Source code locations
 message Location {
-
   // 0-indexed start and end line and column numbers.
   message Range {
     int32 start_line = 1;
@@ -462,13 +450,10 @@ message Location {
   Range range = 2;
 }
 
-
 // Expressions
 message Expr {
-
   // Record construction ('ExpRecCon')
   message RecCon {
-
     // type of the record being constructed
     Type.Con tycon = 1;
 
@@ -478,7 +463,6 @@ message Expr {
 
   // Record projection (ExpRecProj)
   message RecProj {
-
     // type of the record being projected.
     Type.Con tycon = 1;
 
@@ -491,7 +475,6 @@ message Expr {
 
   // Record update ('ExpRecUp')
   message RecUpd {
-
     // type of the record being updated
     Type.Con tycon = 1;
 
@@ -507,7 +490,6 @@ message Expr {
 
   // Variant construction ('ExpVariantCon')
   message VariantCon {
-
     // type of the variant being constructed
     Type.Con tycon = 1;
 
@@ -520,7 +502,6 @@ message Expr {
 
   // Enum construction ('ExpEnumCon')
   message EnumCon {
-
     // Name of the type constructor name
     TypeConId tycon = 1;
 
@@ -557,7 +538,6 @@ message Expr {
 
   // Application ('ExpApp')
   message App {
-
     // Function
     Expr fun = 1;
 
@@ -568,7 +548,6 @@ message Expr {
 
   // Type application ('ExpTyApp')
   message TyApp {
-
     // Polymorphic expression
     Expr expr = 1;
 
@@ -579,7 +558,6 @@ message Expr {
 
   // Abstraction ('ExpAbs')
   message Abs {
-
     // Abstracted Variables with their kind
     // *Must be non-empty*
     repeated VarWithType param = 1;
@@ -589,7 +567,6 @@ message Expr {
   }
 
   message TyAbs {
-
     // Abstracted Variables with their type
     // *Must be non-empty*
     repeated TypeVarWithKind param = 1;
@@ -600,14 +577,12 @@ message Expr {
 
   // Empty list ('ExpNil')
   message Nil {
-
     // type of the list elements.
     Type type = 1;
   }
 
   // Non empty list
   message Cons {
-
     // type of the list elements.
     Type type = 1;
 
@@ -622,7 +597,6 @@ message Expr {
   // (*Since version 1*)
   // Empty optional value
   message OptionalNone {
-
     // type of the element
     Type type = 1;
   }
@@ -630,7 +604,6 @@ message Expr {
   // (*Since version 1*)
   // Non empty optional value
   message OptionalSome {
-
     // type of the element
     Type type = 1;
 
@@ -723,8 +696,6 @@ message Expr {
     Expr expr = 2;
   }
 
-
-
   // Convert an interface back to a template payload, or raises WronglyTypedContract if not possible.
   message UnsafeFromInterface {
     TypeConId interface_type = 1;
@@ -781,7 +752,7 @@ message Expr {
 
   message Experimental {
     string name = 1;
-    Type type = 2 ;
+    Type type = 2;
   }
 
   // Location of the expression in the Daml code source.
@@ -789,7 +760,6 @@ message Expr {
   Location location = 1;
 
   oneof Sum {
-
     // *Must be a valid interned identifier*
     // this should really be an uint32, change in next breaking change
     int32 var_interned_str = 2;
@@ -924,10 +894,8 @@ message Expr {
 
 // Case alternative
 message CaseAlt {
-
   // Variant pattern
   message Variant {
-
     // name of the type constructor
     TypeConId con = 1;
 
@@ -940,7 +908,6 @@ message CaseAlt {
 
   // Enum pattern
   message Enum {
-
     // name of the type constructor
     TypeConId con = 1;
 
@@ -959,8 +926,8 @@ message CaseAlt {
 
   // Non empty option patterm
   message OptionalSome {
-      // *Must be a valid interned identifier*
-      int32 var_body_interned_str = 1;
+    // *Must be a valid interned identifier*
+    int32 var_body_interned_str = 1;
   }
 
   oneof Sum {
@@ -998,7 +965,6 @@ message Pure {
 }
 
 message Update {
-
   // Create Update
   message Create {
     // Template type
@@ -1046,10 +1012,10 @@ message Update {
     Expr arg = 4;
 
     // exercise guard (Interface -> Bool)
-    Expr guard = 5;  // *optional*  *Available in versions >= 2.dev*
+    Expr guard = 5; // *optional*  *Available in versions >= 2.dev*
   }
 
- // ExerciseByKey Update
+  // ExerciseByKey Update
   message ExerciseByKey {
     // Template type
     TypeConId template = 1;
@@ -1077,6 +1043,16 @@ message Update {
     Expr cid = 2;
   }
 
+  message UnpackTemplate {
+    TypeConId template = 1;
+    Expr cid = 2;
+  }
+
+  message UnpackInterface {
+    TypeConId interface = 1;
+    Expr cid = 2;
+  }
+
   // Embedded Expression Update
   message EmbedExpr {
     // Expression type
@@ -1086,10 +1062,15 @@ message Update {
   }
 
   // Retrieve by key Update
+  // used for FetchByKey, named as such since pre-NUCk it used to also be used for LookupByKey
   message RetrieveByKey {
     TypeConId template = 1;
     // Note: The following field could be reused as it was dropped when RetrieveByKey was still in 2.dev
     reserved 2; // was key.
+  }
+
+  message QueryNByKey {
+    TypeConId template = 1;
   }
 
   // Try-catch block.
@@ -1108,11 +1089,11 @@ message Update {
     Block block = 2;
     Create create = 3;
     Exercise exercise = 4;
-    ExerciseByKey exercise_by_key = 10;
+    ExerciseByKey exercise_by_key = 10; // from 2.3
     Fetch fetch = 5;
     Unit get_time = 6;
-    RetrieveByKey lookup_by_key = 8;
-    RetrieveByKey fetch_by_key = 9;
+    QueryNByKey query_n_by_key = 16; // from 2.3
+    RetrieveByKey fetch_by_key = 9; // from 2.3
     EmbedExpr embed_expr = 7;
     TryCatch try_catch = 11;
     CreateInterface create_interface = 12;
@@ -1120,7 +1101,15 @@ message Update {
     FetchInterface fetch_interface = 14;
 
     Expr ledger_time_lt = 15;
+
+    // Next id is 17.
+
+    // from 2.dev
+    UnpackTemplate unpack_template = 1000;
+    UnpackInterface unpack_interface = 1001;
   }
+
+  reserved 8; // was RetrieveByKey lookup_by_key = 8
 }
 
 // Template choice definition.
@@ -1155,16 +1144,13 @@ message TemplateChoice {
   // *Must be a valid interned identifier*
   int32 self_binder_interned_str = 10;
 
-
   // The optional authorizers of the choice. When present they have type `List Party`.
   // When missing, we assume the default value: template-signatories + choice-cotrollers.
   Expr authorizers = 1001; // *Available in versions >= 2.dev*
-
 }
 
-  // Contents of an interface instance.
+// Contents of an interface instance.
 message InterfaceInstanceBody {
-
   message InterfaceInstanceMethod {
     int32 method_interned_name = 1;
     Expr value = 2;
@@ -1176,7 +1162,6 @@ message InterfaceInstanceBody {
 
 // Contract template definition
 message DefTemplate {
-
   message DefKey {
     Type type = 1;
     Expr key_expr = 4;
@@ -1236,7 +1221,6 @@ message InterfaceMethod {
 // Interface definition.
 // *Available in versions >= 1.15*
 message DefInterface {
-
   Location location = 1;
   int32 tycon_interned_dname = 2;
   repeated InterfaceMethod methods = 3;
@@ -1296,7 +1280,6 @@ message DefDataType {
     EnumConstructors enum = 7;
     Unit interface = 8; // Interfaces are special, they can't be represented as records or variants.
   }
-
 }
 
 // Type synonym definition
@@ -1339,7 +1322,6 @@ message FeatureFlags {
 }
 
 message Module {
-
   int32 name_interned_dname = 1;
   FeatureFlags flags = 2;
   repeated DefTypeSyn synonyms = 3;
@@ -1381,7 +1363,7 @@ message Package {
   repeated Expr interned_exprs = 7; // *Available in versions >= 2.dev*
 
   oneof ImportsSum {
-    string no_imported_packages_reason = 8;  // *Available in versions >= 2.dev*
+    string no_imported_packages_reason = 8; // *Available in versions >= 2.dev*
     PackageImports package_imports = 9; // *Available in versions >= 2.dev*
   }
 }

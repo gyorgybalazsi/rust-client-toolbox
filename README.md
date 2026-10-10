@@ -8,20 +8,22 @@ Why Rust? Because it's not an officially supported client language, and building
 
 ## Prerequisites
 
-- **Daml SDK** `3.4.8+`
-- **[protoc](https://protobuf.dev/installation/)** (Protocol Buffer Compiler)
+- **Rust** (stable) with Cargo
+- **Daml SDK** `3.4.8+` with the `dpm` CLI (used by `sandbox-init`, the `just` recipes and the integration tests)
+- **[protoc](https://protobuf.dev/installation/)** (Protocol Buffer Compiler), needed to build `ledger-api` and `codegen`
 - **Docker Desktop** or **Neo4j Desktop** (for ledger-explorer and ledger-graph-ui)
 - **[just](https://github.com/casey/just)** command runner (optional, for convenience recipes)
+- **[Dioxus CLI](https://dioxuslabs.com/learn/0.7/getting_started/)** `dx` 0.7 (only for ledger-graph-ui)
 
-Add protoc to rust-analyzer in `.vscode/settings.json`:
+The Ledger API and Daml-LF `.proto` files are vendored from the [Canton 3.6.1 release](https://github.com/digital-asset/canton/releases/tag/v3.6.1). The `codegen` build script re-downloads the Daml-LF protos from the Canton repository when the version in `codegen/daml-sdk-version` changes.
 
-```json
-{
-    "rust-analyzer.server.extraEnv": {
-        "PROTOC": "/usr/local/bin/protoc"
-    }
-}
+Build everything with:
+
 ```
+cargo build --workspace
+```
+
+The checked-in `.vscode/settings.json` points rust-analyzer at protoc installed by Homebrew on Apple Silicon (`/opt/homebrew/bin/protoc`). Change the `PROTOC` path there if yours lives elsewhere (`which protoc`).
 
 ## Workspace Crates
 
@@ -36,8 +38,8 @@ Add protoc to rust-analyzer in `.vscode/settings.json`:
 | **ledger-graph-ui** | bin | Dioxus fullstack web UI for visualizing the Neo4j event graph |
 | **submit** | lib | Library for submitting Daml contracts and exercising choices via gRPC |
 | **sandbox-init** | bin | CLI tool to start a Daml sandbox and run initialization scripts from DAR files |
-| **wallet** | lib | Placeholder for wallet functionality (not yet implemented) |
-| **test** | lib | Integration tests for the `LapiAccess` trait paired with Daml examples |
+| **wallet** | bin | Placeholder for wallet functionality (not yet implemented) |
+| **test** (`daml-model-rep-examples`) | lib | Integration tests for the `LapiAccess` trait paired with the Daml examples in `_daml/` |
 
 ### client CLI
 
@@ -65,9 +67,24 @@ Streams the Canton event graph into Neo4j with:
 - Configurable batching, flush timeouts, and idle detection
 - Multi-profile config support (local, devnet, mainnet)
 
-Configuration goes in `ledger-explorer/config/config.toml` (gitignored).
+Configuration goes in `ledger-explorer/config/config.toml` (gitignored). Start from the example:
+
+```
+cp ledger-explorer/config/config.toml.example ledger-explorer/config/config.toml
+```
+
+See [ledger-explorer/README.md](ledger-explorer/README.md) for the graph schema, CLI flags and example queries.
 
 See also: [A Daml ledger tells a story](https://discuss.daml.com/t/blog-post-a-daml-ledger-tells-a-story-it-s-time-to-show-it-to-everyone/6734).
+
+### ledger-graph-ui
+
+A Dioxus fullstack app that reads the Neo4j graph written by ledger-explorer. It looks for `config/config.toml` in its own folder, falling back to `../ledger-explorer/config/config.toml`, and uses its `[neo4j]` section. Run it with the Dioxus CLI:
+
+```
+cd ledger-graph-ui
+dx serve
+```
 
 ### codegen
 
@@ -97,8 +114,22 @@ just sandbox-init-ticketoffer     # init sandbox with ticketoffer example
 
 ## Daml Examples
 
-Test Daml models live in the `_daml/` folder. Each contains a Daml script that allocates parties when started with `daml start`.
+Test Daml models live in the `_daml/` folder. Each is a multi-package project with a `main` package (templates) and a `test` package (a Daml script that allocates parties and creates contracts).
 
-To retrieve party IDs after starting Sandbox:
-1. Start the Canton console: `daml canton-console`
-2. List parties: `sandbox.parties.list().map(_.party.toProtoPrimitive)`
+The `sandbox-init-*` recipes build a project with `dpm build --all`, start `dpm sandbox` with the main DAR on `localhost:6865`, and run the setup script, for example:
+
+```
+just sandbox-init-ticketoffer
+```
+
+To list the allocated party IDs (the local sandbox runs without authentication, so any token value works):
+
+```
+cargo run -p client -- parties --url http://localhost:6865 --access-token sandbox
+```
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
+
+The vendored Daml Ledger API and Daml-LF `.proto` files are © Digital Asset and licensed under Apache-2.0. The vendored Google protobuf definitions keep their original license headers.

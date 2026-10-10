@@ -13,3 +13,5 @@ plans
 analytics-queries.local.toml
 docs/
 .codegraph/
+sandbox.log
+sandbox.pid

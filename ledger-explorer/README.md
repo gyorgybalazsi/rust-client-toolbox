@@ -187,7 +187,7 @@ WHERE NOT (c)<-[:CONSUMES]-()
 RETURN c.template_name, count(*) as active_count
 ```
 
-You can import the saved Cypher query collection from the `config/` folder into Neo4j Desktop.
+You can import the saved Cypher query collection (`neo4j_query_saved_cypher.csv` in this folder) into Neo4j Desktop.
 
 ## Architecture
 

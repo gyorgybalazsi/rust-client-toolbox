@@ -11,7 +11,7 @@ pub async fn get_ledger_end(
     access_token: Option<&str>,
 ) -> Result<i64> {
     let mut state_service_client = StateServiceClient::connect(url.to_string()).await?;
-    let mut req: Request<GetLedgerEndRequest> = Request::new(GetLedgerEndRequest {});
+    let mut req: Request<GetLedgerEndRequest> = Request::new(GetLedgerEndRequest { synchronizer_id: vec![] });
     if let Some(token) = access_token {
         let meta = MetadataValue::try_from(format!("Bearer {}", token))?;
         req.metadata_mut().insert("authorization", meta);

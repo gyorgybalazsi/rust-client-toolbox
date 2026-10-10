@@ -15,6 +15,7 @@ pub async fn get_parties(
         page_token: "".to_string(),
         page_size: 0,
         identity_provider_id: "".to_string(),
+        filter_party: "".to_string(),
     };
     let mut req = Request::new(request);
     if let Some(token) = access_token {

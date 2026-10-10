@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::archive::{archive_from_dar, extract_dalfs_from_dar};
 use anyhow::{Context, Result};
 use crate::lf_protobuf::com::daml::daml_lf_2::Package;
-use crate::lf_protobuf::com::daml::daml_lf_dev::{Archive, ArchivePayload, archive_payload};
+use crate::lf_protobuf::com::daml::daml_lf::{Archive, ArchivePayload, archive_payload};
 use prost::Message;
 use tracing::warn;
 
