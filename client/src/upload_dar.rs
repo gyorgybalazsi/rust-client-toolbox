@@ -34,6 +34,10 @@ pub async fn upload_dars(
         let request = UploadDarFileRequest {
             dar_file: dar_bytes,
             submission_id: uuid::Uuid::new_v4().to_string(),
+            // Unspecified defaults to vetting all packages in the DAR
+            vetting_change: 0,
+            // Empty lets the participant pick the synchronizer when connected to only one
+            synchronizer_id: String::new(),
         };
 
         info!("Requesting DAR file upload: {:?}", dar_path);

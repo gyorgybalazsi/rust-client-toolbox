@@ -15,6 +15,8 @@ Why Rust? Because it's not an officially supported client language, and building
 - **[just](https://github.com/casey/just)** command runner (optional, for convenience recipes)
 - **[Dioxus CLI](https://dioxuslabs.com/learn/0.7/getting_started/)** `dx` 0.7 (only for ledger-graph-ui)
 
+The Ledger API and Daml-LF `.proto` files are vendored from the Daml SDK 3.4.11 release (`protobufs-3.4.11.zip`). The `codegen` build script re-downloads the Daml-LF protos when `codegen/daml-sdk-version` changes.
+
 Build everything with:
 
 ```

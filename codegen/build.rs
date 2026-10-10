@@ -9,6 +9,7 @@ const ALL_PROTO_SRC_PATHS: &[&str] = &["com/digitalasset/daml/lf/archive"];
 const PROTO_ROOT_PATH: &str = "resources/protobuf";
 const PROTO_ARCHIVE_DIR: &str = "com/digitalasset/daml/lf/archive";
 const DESIRED_VERSION_FILE: &str = "daml-sdk-version";
+const PROTO_FILES: &[&str] = &["daml_lf.proto", "daml_lf2.proto"];
 const GITHUB_RELEASE_URL: &str = "https://github.com/digital-asset/daml/releases/download";
 
 fn main() -> Result<(), Box<dyn error::Error>> {
@@ -75,22 +76,24 @@ fn download_and_install_proto(version: &str) -> Result<(), Box<dyn error::Error>
         ).into());
     }
 
-    // Extract daml_lf2.proto from the zip
+    // Extract the Daml-LF archive protos from the zip
     let zip_bytes = fs::read(&zip_path)?;
     let mut archive = zip::ZipArchive::new(Cursor::new(zip_bytes))?;
 
-    let proto_entry_name = format!("protos-{}/{}/daml_lf2.proto", version, PROTO_ARCHIVE_DIR);
-    let mut entry = archive.by_name(&proto_entry_name)
-        .map_err(|e| format!("daml_lf2.proto not found in zip: {} (looked for {})", e, proto_entry_name))?;
+    for proto_file in PROTO_FILES {
+        let proto_entry_name = format!("protos-{}/{}/{}", version, PROTO_ARCHIVE_DIR, proto_file);
+        let mut entry = archive.by_name(&proto_entry_name)
+            .map_err(|e| format!("{} not found in zip: {} (looked for {})", proto_file, e, proto_entry_name))?;
 
-    let mut proto_bytes = Vec::new();
-    entry.read_to_end(&mut proto_bytes)?;
+        let mut proto_bytes = Vec::new();
+        entry.read_to_end(&mut proto_bytes)?;
 
-    let target_path = Path::new(PROTO_ROOT_PATH)
-        .join(PROTO_ARCHIVE_DIR)
-        .join("daml_lf2.proto");
+        let target_path = Path::new(PROTO_ROOT_PATH)
+            .join(PROTO_ARCHIVE_DIR)
+            .join(proto_file);
 
-    fs::write(&target_path, &proto_bytes)?;
+        fs::write(&target_path, &proto_bytes)?;
+    }
 
     // Clean up zip
     let _ = fs::remove_file(&zip_path);

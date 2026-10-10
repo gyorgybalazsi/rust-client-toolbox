@@ -57,8 +57,6 @@ pub async fn stream_active_contracts(
     };
 
     let request = GetActiveContractsRequest {
-        filter: None,
-        verbose: false,
         active_at_offset,
         event_format: Some(event_format),
     };

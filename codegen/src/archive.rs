@@ -3,7 +3,7 @@ use std::io::{Read, Cursor};
 use zip::ZipArchive;
 use prost::Message;
 use anyhow::{Context, Result};
-use crate::lf_protobuf::com::daml::daml_lf_dev::Archive;
+use crate::lf_protobuf::com::daml::daml_lf::Archive;
 
 pub fn archive_from_dar(dar_path: &str) -> Result<Archive> {
     let mut file = File::open(dar_path)

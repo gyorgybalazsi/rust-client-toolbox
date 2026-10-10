@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
-package daml_lf_dev;
+package daml_lf;
 
 option java_package = "com.digitalasset.daml.lf.archive";
 option csharp_namespace = "Com.DigitalAsset.Daml.Lf.Archive.DamlLf";
@@ -13,6 +13,8 @@ message ArchivePayload {
   // this is number 3 for historical reasons -- we had
   // Daml-LF v0 and v1 before we had minor versions.
   string minor = 3;
+  int32 patch = 5;
+
   reserved 9999; // for the removed "dev" major version
   reserved 1; // was daml_lf_0
 

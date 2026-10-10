@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_try_convert_data_types() -> Result<()> {
-        let dar_path = "/Users/gyorgybalazsi/rust-client-toolbox/_daml/daml-ticketoffer/.daml/dist/daml-ticketoffer-0.0.1.dar";
+        let dar_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../_daml/daml-ticketoffer/main/.daml/dist/daml-ticketoffer-0.0.1.dar");
         let parsed_dar = parse_dar(dar_path)?;
         let package = package_from_dar(dar_path)?;
 
