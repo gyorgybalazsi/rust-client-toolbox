@@ -32,6 +32,7 @@ pub async fn create_user(
         is_deactivated: false,
         metadata: None,
         identity_provider_id: String::new(),
+        primary_party_authentication: false,
     };
 
     let request = CreateUserRequest {

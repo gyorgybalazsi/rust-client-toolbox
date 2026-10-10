@@ -4,16 +4,22 @@ pub struct GetTimeRequest {}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct GetTimeResponse {
     /// The current time according to the ledger server.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub current_time: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct SetTimeRequest {
     /// MUST precisely match the current time as it's known to the ledger server.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub current_time: ::core::option::Option<::prost_types::Timestamp>,
     /// The time the client wants to set on the ledger.
     /// MUST be a point int time after ``current_time``.
+    ///
+    /// Required
     #[prost(message, optional, tag = "2")]
     pub new_time: ::core::option::Option<::prost_types::Timestamp>,
 }

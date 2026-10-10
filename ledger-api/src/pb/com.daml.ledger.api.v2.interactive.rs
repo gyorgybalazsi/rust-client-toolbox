@@ -2,50 +2,132 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GlobalKey {
     /// The identifier uses the package-id reference format.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<super::Identifier>,
+    /// Required
     #[prost(string, tag = "2")]
     pub package_name: ::prost::alloc::string::String,
+    /// Required
     #[prost(message, optional, tag = "3")]
     pub key: ::core::option::Option<super::Value>,
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "4")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GlobalKeyWithMaintainers {
+    /// The key
+    ///
+    /// Required
+    #[prost(message, optional, tag = "1")]
+    pub key: ::core::option::Option<GlobalKey>,
+    /// Key maintainers
+    ///
+    /// Required: must be non-empty
+    #[prost(string, repeated, tag = "2")]
+    pub maintainers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Hints to improve cost estimation precision of a prepared transaction
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CostEstimationHints {
     /// Disable cost estimation
     /// Default (not set) is false
+    ///
+    /// Optional
     #[prost(bool, tag = "1")]
     pub disabled: bool,
     /// Details on the keys that will be used to sign the transaction (how many and of which type).
     /// Signature size impacts the cost of the transaction.
     /// If empty, the signature sizes will be approximated with threshold-many signatures (where threshold is defined
-    /// in the PartyToKeyMapping of the external party), using keys in the order they are registered.
-    /// Optional (empty list is equivalent to not providing this field)
+    /// in the PartyToParticipant of the external party), using keys in the order they are registered.
+    /// Empty list is equivalent to not providing this field
+    ///
+    /// Optional: can be empty
     #[prost(enumeration = "super::SigningAlgorithmSpec", repeated, tag = "2")]
     pub expected_signatures: ::prost::alloc::vec::Vec<i32>,
+}
+/// Estimation of re-assignment costs
+/// This is the cost of re-assigning contracts from another synchronizer if necessary.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReassignmentCost {
+    /// The synchronizer the contracts are currently assigned to, and against whose traffic balance
+    /// the unassignment cost is charged
+    ///
+    /// Required
+    #[prost(string, tag = "1")]
+    pub source_synchronizer_id: ::prost::alloc::string::String,
+    /// The synchronizer the contracts will be re-assigned to, and against whose traffic balance
+    /// the assignment cost is charged
+    ///
+    /// Required
+    #[prost(string, tag = "2")]
+    pub target_synchronizer_id: ::prost::alloc::string::String,
+    /// The contracts that will be unassigned together in this single unassignment request
+    ///
+    /// Required: must be non-empty
+    #[prost(string, repeated, tag = "3")]
+    pub contract_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Estimated traffic cost of the unassignment confirmation request
+    ///
+    /// Required
+    #[prost(uint64, tag = "4")]
+    pub unassignment_request_traffic_cost_estimation: u64,
+    /// Estimated traffic cost of the unassignment confirmation response
+    ///
+    /// Required
+    #[prost(uint64, tag = "5")]
+    pub unassignment_response_traffic_cost_estimation: u64,
+    /// Estimated traffic cost of the assignment confirmation request
+    ///
+    /// Required
+    #[prost(uint64, tag = "6")]
+    pub assignment_request_traffic_cost_estimation: u64,
+    /// Estimated traffic cost of the assignment confirmation response
+    ///
+    /// Required
+    #[prost(uint64, tag = "7")]
+    pub assignment_response_traffic_cost_estimation: u64,
+    /// Sum of the fields above
+    ///
+    /// Required
+    #[prost(uint64, tag = "8")]
+    pub total_reassignment_cost_estimation: u64,
 }
 /// Estimation of the cost of submitting the prepared transaction
 /// The estimation is done against the synchronizer chosen during preparation of the transaction
 /// (or the one explicitly requested).
 /// The cost of re-assigning contracts to another synchronizer when necessary is not included in the estimation.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CostEstimation {
     /// Timestamp at which the estimation was made
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub estimation_timestamp: ::core::option::Option<::prost_types::Timestamp>,
     /// Estimated traffic cost of the confirmation request associated with the transaction
+    ///
+    /// Required
     #[prost(uint64, tag = "2")]
     pub confirmation_request_traffic_cost_estimation: u64,
     /// Estimated traffic cost of the confirmation response associated with the transaction
     /// This field can also be used as an indication of the cost that other potential confirming nodes
     /// of the party will incur to approve or reject the transaction
+    ///
+    /// Required
     #[prost(uint64, tag = "3")]
     pub confirmation_response_traffic_cost_estimation: u64,
     /// Sum of the fields above
+    ///
+    /// Required
     #[prost(uint64, tag = "4")]
     pub total_traffic_cost_estimation: u64,
+    /// Estimated cost of re-assigning contracts if necessary
+    ///
+    /// Optional: can be empty
+    #[prost(message, repeated, tag = "5")]
+    pub reassignment_costs: ::prost::alloc::vec::Vec<ReassignmentCost>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PrepareSubmissionRequest {
@@ -53,6 +135,7 @@ pub struct PrepareSubmissionRequest {
     /// Must be a valid UserIdString (as described in ``value.proto``).
     /// Required unless authentication is used with a user token.
     /// In that case, the token's user-id will be used for the request's user_id.
+    ///
     /// Optional
     #[prost(string, tag = "1")]
     pub user_id: ::prost::alloc::string::String,
@@ -61,13 +144,15 @@ pub struct PrepareSubmissionRequest {
     /// where act_as is interpreted as a set of party names.
     /// The change ID can be used for matching the intended ledger changes with all their completions.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub command_id: ::prost::alloc::string::String,
     /// Individual elements of this atomic command. Must be non-empty.
     /// Limitation: Only single command transaction are currently supported by the API.
     /// The field is marked as repeated in preparation for future support of multiple commands.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "3")]
     pub commands: ::prost::alloc::vec::Vec<super::Command>,
     /// Optional
@@ -80,6 +165,7 @@ pub struct PrepareSubmissionRequest {
     /// which is useful to know when it can definitely not be accepted
     /// anymore and resorting to preparing another transaction for the same
     /// intent is safe again.
+    ///
     /// Optional
     #[prost(message, optional, tag = "11")]
     pub max_record_time: ::core::option::Option<::prost_types::Timestamp>,
@@ -89,7 +175,8 @@ pub struct PrepareSubmissionRequest {
     /// and does not execute it. Therefore read authorization is sufficient even for actAs parties.
     /// Note: This may change, and more specific authorization scope may be introduced in the future.
     /// Each element must be a valid PartyIdString (as described in ``value.proto``).
-    /// Required, must be non-empty.
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "5")]
     pub act_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Set of parties on whose behalf (in addition to all parties listed in ``act_as``) contracts can be retrieved.
@@ -99,35 +186,41 @@ pub struct PrepareSubmissionRequest {
     /// rules for fetch operations.
     /// If ledger API authorization is enabled, then the authorization metadata must authorize the sender of the request
     /// to read contract data on behalf of each of the given parties.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "6")]
     pub read_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Additional contracts used to resolve contract & contract key lookups.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "7")]
     pub disclosed_contracts: ::prost::alloc::vec::Vec<super::DisclosedContract>,
     /// Must be a valid synchronizer id
     /// If not set, a suitable synchronizer that this node is connected to will be chosen
+    ///
     /// Optional
     #[prost(string, tag = "8")]
     pub synchronizer_id: ::prost::alloc::string::String,
     /// The package-id selection preference of the client for resolving
     /// package names and interface instances in command submission and interpretation
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "9")]
     pub package_id_selection_preference: ::prost::alloc::vec::Vec<
         ::prost::alloc::string::String,
     >,
     /// When true, the response will contain additional details on how the transaction was encoded and hashed
     /// This can be useful for troubleshooting of hash mismatches. Should only be used for debugging.
-    /// Optional, default to false
+    /// Defaults to false
+    ///
+    /// Optional
     #[prost(bool, tag = "10")]
     pub verbose_hashing: bool,
     /// Fetches the contract keys into the caches to speed up the command processing.
     /// Should only contain contract keys that are expected to be resolved during interpretation of the commands.
     /// Keys of disclosed contracts do not need prefetching.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "15")]
     pub prefetch_contract_keys: ::prost::alloc::vec::Vec<super::PrefetchContractKey>,
     /// Hints to improve the accuracy of traffic cost estimation.
@@ -136,31 +229,60 @@ pub struct PrepareSubmissionRequest {
     /// Request amplification is not accounted for in the estimation: each amplified request will
     /// result in the cost of the confirmation request to be charged additionally.
     ///
-    /// Optional - Traffic cost estimation is enabled by default if this field is not set
+    /// Traffic cost estimation is enabled by default if this field is not set
     /// To turn off cost estimation, set the CostEstimationHints#disabled field to true
+    ///
+    /// Optional
     #[prost(message, optional, tag = "16")]
     pub estimate_traffic_cost: ::core::option::Option<CostEstimationHints>,
+    /// The hashing scheme version to be used when building the hash.
+    /// Defaults to HASHING_SCHEME_VERSION_V2.
+    /// HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+    /// rejected on synchronizers running older protocol versions.
+    ///
+    /// Optional
+    #[prost(enumeration = "HashingSchemeVersion", optional, tag = "17")]
+    pub hashing_scheme_version: ::core::option::Option<i32>,
+    /// The maximum number of passes for the Topology-Aware Package Selection (TAPS).
+    /// Higher values can increase the chance of successful package selection for routing of interpreted transactions.
+    /// If unset, this defaults to the value defined in the participant configuration.
+    /// The provided value must not exceed the limit specified in the participant configuration.
+    ///
+    /// Optional
+    #[prost(uint32, optional, tag = "18")]
+    pub taps_max_passes: ::core::option::Option<u32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PrepareSubmissionResponse {
     /// The interpreted transaction, it represents the ledger changes necessary to execute the commands specified in the request.
     /// Clients MUST display the content of the transaction to the user for them to validate before signing the hash if the preparing participant is not trusted.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub prepared_transaction: ::core::option::Option<PreparedTransaction>,
     /// Hash of the transaction, this is what needs to be signed by the party to authorize the transaction.
     /// Only provided for convenience, clients MUST recompute the hash from the raw transaction if the preparing participant is not trusted.
     /// May be removed in future versions
+    ///
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "2")]
     pub prepared_transaction_hash: ::prost::alloc::vec::Vec<u8>,
-    /// The hashing scheme version used when building the hash
+    /// The hashing scheme version used when building the hash.
+    /// HASHING_SCHEME_VERSION_V4 is only returned for synchronizers running protocol version 36 or
+    /// later.
+    ///
+    /// Required
     #[prost(enumeration = "HashingSchemeVersion", tag = "3")]
     pub hashing_scheme_version: i32,
     /// Optional additional details on how the transaction was encoded and hashed. Only set if verbose_hashing = true in the request
     /// Note that there are no guarantees on the stability of the format or content of this field.
     /// Its content should NOT be parsed and should only be used for troubleshooting purposes.
+    ///
+    /// Optional
     #[prost(string, optional, tag = "4")]
     pub hashing_details: ::core::option::Option<::prost::alloc::string::String>,
     /// Traffic cost estimation of the prepared transaction
+    ///
     /// Optional
     #[prost(message, optional, tag = "5")]
     pub cost_estimation: ::core::option::Option<CostEstimation>,
@@ -169,11 +291,13 @@ pub struct PrepareSubmissionResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SinglePartySignatures {
     /// Submitting party
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub party: ::prost::alloc::string::String,
     /// Signatures
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "2")]
     pub signatures: ::prost::alloc::vec::Vec<super::Signature>,
 }
@@ -181,7 +305,8 @@ pub struct SinglePartySignatures {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PartySignatures {
     /// Additional signatures provided by all individual parties
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "1")]
     pub signatures: ::prost::alloc::vec::Vec<SinglePartySignatures>,
 }
@@ -190,6 +315,7 @@ pub struct ExecuteSubmissionRequest {
     /// the prepared transaction
     /// Typically this is the value of the `prepared_transaction` field in `PrepareSubmissionResponse`
     /// obtained from calling `prepareSubmission`.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub prepared_transaction: ::core::option::Option<PreparedTransaction>,
@@ -197,6 +323,7 @@ pub struct ExecuteSubmissionRequest {
     /// Each party can provide one or more signatures..
     /// and one or more parties can sign.
     /// Note that currently, only single party submissions are supported.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub party_signatures: ::core::option::Option<PartySignatures>,
@@ -209,20 +336,26 @@ pub struct ExecuteSubmissionRequest {
     #[prost(string, tag = "5")]
     pub submission_id: ::prost::alloc::string::String,
     /// See \[PrepareSubmissionRequest.user_id\]
+    ///
     /// Optional
     #[prost(string, tag = "6")]
     pub user_id: ::prost::alloc::string::String,
-    /// The hashing scheme version used when building the hash
+    /// The hashing scheme version used when building the hash.
+    /// HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+    /// rejected on synchronizers running older protocol versions.
+    ///
     /// Required
     #[prost(enumeration = "HashingSchemeVersion", tag = "7")]
     pub hashing_scheme_version: i32,
     /// If set will influence the chosen ledger effective time but will not result in a submission delay so any override
     /// should be scheduled to executed within the window allowed by synchronizer.
+    ///
     /// Optional
     #[prost(message, optional, tag = "8")]
     pub min_ledger_time: ::core::option::Option<MinLedgerTime>,
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[prost(oneof = "execute_submission_request::DeduplicationPeriod", tags = "3, 4")]
     pub deduplication_period: ::core::option::Option<
@@ -233,6 +366,7 @@ pub struct ExecuteSubmissionRequest {
 pub mod execute_submission_request {
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum DeduplicationPeriod {
@@ -254,6 +388,7 @@ pub struct ExecuteSubmissionAndWaitRequest {
     /// the prepared transaction
     /// Typically this is the value of the `prepared_transaction` field in `PrepareSubmissionResponse`
     /// obtained from calling `prepareSubmission`.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub prepared_transaction: ::core::option::Option<PreparedTransaction>,
@@ -261,6 +396,7 @@ pub struct ExecuteSubmissionAndWaitRequest {
     /// Each party can provide one or more signatures..
     /// and one or more parties can sign.
     /// Note that currently, only single party submissions are supported.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub party_signatures: ::core::option::Option<PartySignatures>,
@@ -273,20 +409,26 @@ pub struct ExecuteSubmissionAndWaitRequest {
     #[prost(string, tag = "5")]
     pub submission_id: ::prost::alloc::string::String,
     /// See \[PrepareSubmissionRequest.user_id\]
+    ///
     /// Optional
     #[prost(string, tag = "6")]
     pub user_id: ::prost::alloc::string::String,
-    /// The hashing scheme version used when building the hash
+    /// The hashing scheme version used when building the hash.
+    /// HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+    /// rejected on synchronizers running older protocol versions.
+    ///
     /// Required
     #[prost(enumeration = "HashingSchemeVersion", tag = "7")]
     pub hashing_scheme_version: i32,
     /// If set will influence the chosen ledger effective time but will not result in a submission delay so any override
     /// should be scheduled to executed within the window allowed by synchronizer.
+    ///
     /// Optional
     #[prost(message, optional, tag = "8")]
     pub min_ledger_time: ::core::option::Option<MinLedgerTime>,
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[prost(
         oneof = "execute_submission_and_wait_request::DeduplicationPeriod",
@@ -300,6 +442,7 @@ pub struct ExecuteSubmissionAndWaitRequest {
 pub mod execute_submission_and_wait_request {
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum DeduplicationPeriod {
@@ -318,10 +461,12 @@ pub mod execute_submission_and_wait_request {
 pub struct ExecuteSubmissionAndWaitResponse {
     /// The id of the transaction that resulted from the submitted command.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The details of the offset field are described in ``community/ledger-api/README.md``.
+    ///
     /// Required
     #[prost(int64, tag = "2")]
     pub completion_offset: i64,
@@ -331,6 +476,7 @@ pub struct ExecuteSubmissionAndWaitForTransactionRequest {
     /// the prepared transaction
     /// Typically this is the value of the `prepared_transaction` field in `PrepareSubmissionResponse`
     /// obtained from calling `prepareSubmission`.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub prepared_transaction: ::core::option::Option<PreparedTransaction>,
@@ -338,6 +484,7 @@ pub struct ExecuteSubmissionAndWaitForTransactionRequest {
     /// Each party can provide one or more signatures..
     /// and one or more parties can sign.
     /// Note that currently, only single party submissions are supported.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub party_signatures: ::core::option::Option<PartySignatures>,
@@ -350,15 +497,20 @@ pub struct ExecuteSubmissionAndWaitForTransactionRequest {
     #[prost(string, tag = "5")]
     pub submission_id: ::prost::alloc::string::String,
     /// See \[PrepareSubmissionRequest.user_id\]
+    ///
     /// Optional
     #[prost(string, tag = "6")]
     pub user_id: ::prost::alloc::string::String,
-    /// The hashing scheme version used when building the hash
+    /// The hashing scheme version used when building the hash.
+    /// HASHING_SCHEME_VERSION_V4 requires a synchronizer running protocol version 36 or later and is
+    /// rejected on synchronizers running older protocol versions.
+    ///
     /// Required
     #[prost(enumeration = "HashingSchemeVersion", tag = "7")]
     pub hashing_scheme_version: i32,
     /// If set will influence the chosen ledger effective time but will not result in a submission delay so any override
     /// should be scheduled to executed within the window allowed by synchronizer.
+    ///
     /// Optional
     #[prost(message, optional, tag = "8")]
     pub min_ledger_time: ::core::option::Option<MinLedgerTime>,
@@ -367,11 +519,13 @@ pub struct ExecuteSubmissionAndWaitForTransactionRequest {
     /// filter for all original ``act_as`` and ``read_as`` parties and the ``verbose`` flag is set.
     /// When the ``transaction_shape`` TRANSACTION_SHAPE_ACS_DELTA shape is used (explicitly or is defaulted to as explained above),
     /// events will only be returned if the submitting party is hosted on this node.
+    ///
     /// Optional
     #[prost(message, optional, tag = "9")]
     pub transaction_format: ::core::option::Option<super::TransactionFormat>,
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[prost(
         oneof = "execute_submission_and_wait_for_transaction_request::DeduplicationPeriod",
@@ -385,6 +539,7 @@ pub struct ExecuteSubmissionAndWaitForTransactionRequest {
 pub mod execute_submission_and_wait_for_transaction_request {
     /// Specifies the deduplication period for the change ID (See PrepareSubmissionRequest).
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
     /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum DeduplicationPeriod {
@@ -403,17 +558,20 @@ pub mod execute_submission_and_wait_for_transaction_request {
 pub struct ExecuteSubmissionAndWaitForTransactionResponse {
     /// The transaction that resulted from the submitted command.
     /// The transaction might contain no events (request conditions result in filtering out all of them).
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub transaction: ::core::option::Option<super::Transaction>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct MinLedgerTime {
+    /// Required
     #[prost(oneof = "min_ledger_time::Time", tags = "1, 2")]
     pub time: ::core::option::Option<min_ledger_time::Time>,
 }
 /// Nested message and enum types in `MinLedgerTime`.
 pub mod min_ledger_time {
+    /// Required
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum Time {
         /// Lower bound for the ledger time assigned to the resulting transaction.
@@ -440,9 +598,13 @@ pub mod min_ledger_time {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreparedTransaction {
     /// Daml Transaction representing the ledger effect if executed. See below
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub transaction: ::core::option::Option<DamlTransaction>,
     /// Metadata context necessary to execute the transaction
+    ///
+    /// Required
     #[prost(message, optional, tag = "2")]
     pub metadata: ::core::option::Option<Metadata>,
 }
@@ -450,69 +612,86 @@ pub struct PreparedTransaction {
 /// Refer to the hashing documentation for information on how it should be hashed.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Metadata {
+    /// Required
     #[prost(message, optional, tag = "2")]
     pub submitter_info: ::core::option::Option<metadata::SubmitterInfo>,
+    /// Required
     #[prost(string, tag = "3")]
     pub synchronizer_id: ::prost::alloc::string::String,
+    /// Required
     #[prost(uint32, tag = "4")]
     pub mediator_group: u32,
+    /// Required
     #[prost(string, tag = "5")]
     pub transaction_uuid: ::prost::alloc::string::String,
+    /// Required
     #[prost(uint64, tag = "6")]
     pub preparation_time: u64,
+    /// Not populated if the transaction has no input contracts
+    ///
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "7")]
     pub input_contracts: ::prost::alloc::vec::Vec<metadata::InputContract>,
-    ///
-    /// Where ledger time constraints are imposed during the execution of the contract they will be populated
-    /// in the fields below. These are optional because if the transaction does NOT depend on time, these values
-    /// do not need to be set.
-    /// The final ledger effective time used will be chosen when the command is submitted through the \[execute\] RPC.
-    /// If the ledger effective time is outside of any populated min/max bounds then a different transaction
-    /// can result, that will cause a confirmation message rejection.
+    /// Optional
     #[prost(uint64, optional, tag = "9")]
     pub min_ledger_effective_time: ::core::option::Option<u64>,
+    /// Optional
     #[prost(uint64, optional, tag = "10")]
     pub max_ledger_effective_time: ::core::option::Option<u64>,
-    /// Contextual information needed to process the transaction but not signed, either because it's already indirectly
-    /// signed by signing the transaction, or because it doesn't impact the ledger state
-    #[prost(message, repeated, tag = "8")]
-    pub global_key_mapping: ::prost::alloc::vec::Vec<metadata::GlobalKeyMappingEntry>,
     /// Maximum timestamp at which the transaction can be recorded onto the ledger via the synchronizer `synchronizer_id`.
     /// If submitted after it will be rejected even if otherwise valid, in which case it needs to be prepared and signed again
     /// with a new valid max_record_time.
-    /// Unsigned in 3.3 to avoid a breaking protocol change
-    /// Will be signed in 3.4+
     /// Set max_record_time in the PreparedTransactionRequest to get this field set accordingly
+    ///
+    /// Optional
     #[prost(uint64, optional, tag = "11")]
     pub max_record_time: ::core::option::Option<u64>,
+    /// This fields is deprecated and will always be empty.
+    /// Keys and associated contracts are already present and signed within the transaction nodes where they're used
+    ///
+    /// Optional: can be empty
+    #[deprecated]
+    #[prost(message, repeated, tag = "8")]
+    pub global_key_mapping: ::prost::alloc::vec::Vec<metadata::GlobalKeyMappingEntry>,
 }
 /// Nested message and enum types in `Metadata`.
 pub mod metadata {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct SubmitterInfo {
+        /// Required: must be non-empty
         #[prost(string, repeated, tag = "1")]
         pub act_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+        /// Required
         #[prost(string, tag = "2")]
         pub command_id: ::prost::alloc::string::String,
     }
+    /// This message is deprecated and may be removed in future releases
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct GlobalKeyMappingEntry {
+        /// Required
+        #[deprecated]
         #[prost(message, optional, tag = "1")]
         pub key: ::core::option::Option<super::GlobalKey>,
+        /// Optional
+        #[deprecated]
         #[prost(message, optional, tag = "2")]
         pub value: ::core::option::Option<super::super::Value>,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct InputContract {
+        /// Required
         #[prost(uint64, tag = "1000")]
         pub created_at: u64,
+        /// Required: must be non-empty
         #[prost(bytes = "vec", tag = "1002")]
         pub event_blob: ::prost::alloc::vec::Vec<u8>,
+        /// Required
         #[prost(oneof = "input_contract::Contract", tags = "1")]
         pub contract: ::core::option::Option<input_contract::Contract>,
     }
     /// Nested message and enum types in `InputContract`.
     pub mod input_contract {
+        /// Required
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Contract {
             /// When new versions will be added, they will show here
@@ -527,15 +706,23 @@ pub mod metadata {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DamlTransaction {
     /// serialization version, will be >= max(nodes version)
+    ///
+    /// Required
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
     /// Root nodes of the transaction
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "2")]
     pub roots: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// List of nodes in the transaction
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "3")]
     pub nodes: ::prost::alloc::vec::Vec<daml_transaction::Node>,
     /// Node seeds are values associated with certain nodes used for generating cryptographic salts
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "4")]
     pub node_seeds: ::prost::alloc::vec::Vec<daml_transaction::NodeSeed>,
 }
@@ -543,8 +730,10 @@ pub struct DamlTransaction {
 pub mod daml_transaction {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct NodeSeed {
+        /// Required
         #[prost(int32, tag = "1")]
         pub node_id: i32,
+        /// Required: must be non-empty
         #[prost(bytes = "vec", tag = "2")]
         pub seed: ::prost::alloc::vec::Vec<u8>,
     }
@@ -553,73 +742,41 @@ pub mod daml_transaction {
     /// \[docs-entry-start: DamlTransaction.Node\]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Node {
+        /// Required
         #[prost(string, tag = "1")]
         pub node_id: ::prost::alloc::string::String,
         /// Versioned node
+        ///
+        /// Required
         #[prost(oneof = "node::VersionedNode", tags = "1000")]
         pub versioned_node: ::core::option::Option<node::VersionedNode>,
     }
     /// Nested message and enum types in `Node`.
     pub mod node {
         /// Versioned node
+        ///
+        /// Required
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum VersionedNode {
             /// Start at 1000 so we can add more fields before if necessary
             /// When new versions will be added, they will show here
+            ///
+            /// Required
             #[prost(message, tag = "1000")]
             V1(super::super::transaction::v1::Node),
         }
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetPreferredPackageVersionRequest {
-    /// The parties whose participants' vetting state should be considered when resolving the preferred package.
-    /// Required
-    #[prost(string, repeated, tag = "1")]
-    pub parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// The package-name for which the preferred package should be resolved.
-    /// Required
-    #[prost(string, tag = "2")]
-    pub package_name: ::prost::alloc::string::String,
-    /// The synchronizer whose vetting state should be used for resolving this query.
-    /// If not specified, the vetting states of all synchronizers to which the participant is connected are used.
-    /// Optional
-    #[prost(string, tag = "3")]
-    pub synchronizer_id: ::prost::alloc::string::String,
-    /// The timestamp at which the package vetting validity should be computed
-    /// on the latest topology snapshot as seen by the participant.
-    /// If not provided, the participant's current clock time is used.
-    /// Optional
-    #[prost(message, optional, tag = "4")]
-    pub vetting_valid_at: ::core::option::Option<::prost_types::Timestamp>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetPreferredPackageVersionResponse {
-    /// Not populated when no preferred package is found
-    /// Optional
-    #[prost(message, optional, tag = "1")]
-    pub package_preference: ::core::option::Option<PackagePreference>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PackagePreference {
-    /// The package reference of the preferred package.
-    /// Required
-    #[prost(message, optional, tag = "1")]
-    pub package_reference: ::core::option::Option<super::PackageReference>,
-    /// The synchronizer for which the preferred package was computed.
-    /// If the synchronizer_id was specified in the request, then it matches the request synchronizer_id.
-    /// Required
-    #[prost(string, tag = "2")]
-    pub synchronizer_id: ::prost::alloc::string::String,
-}
 /// Defines a package-name for which the commonly vetted package with the highest version must be found.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PackageVettingRequirement {
     /// The parties whose participants' vetting state should be considered when resolving the preferred package.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "1")]
     pub parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The package-name for which the preferred package should be resolved.
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub package_name: ::prost::alloc::string::String,
@@ -632,19 +789,21 @@ pub struct GetPreferredPackagesRequest {
     /// Additional package-name requirements can be provided when additional Daml transaction informees need to use
     /// package dependencies of the command's root packages.
     ///
-    /// Required
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "1")]
     pub package_vetting_requirements: ::prost::alloc::vec::Vec<
         PackageVettingRequirement,
     >,
     /// The synchronizer whose vetting state should be used for resolving this query.
     /// If not specified, the vetting states of all synchronizers to which the participant is connected are used.
+    ///
     /// Optional
     #[prost(string, tag = "2")]
     pub synchronizer_id: ::prost::alloc::string::String,
     /// The timestamp at which the package vetting validity should be computed
     /// on the latest topology snapshot as seen by the participant.
     /// If not provided, the participant's current clock time is used.
+    ///
     /// Optional
     #[prost(message, optional, tag = "3")]
     pub vetting_valid_at: ::core::option::Option<::prost_types::Timestamp>,
@@ -659,11 +818,12 @@ pub struct GetPreferredPackagesResponse {
     /// in the ``package_id_selection_preference`` of the command submission to
     /// avoid race conditions with concurrent changes of the on-ledger package vetting state.
     ///
-    /// Required
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "1")]
     pub package_references: ::prost::alloc::vec::Vec<super::PackageReference>,
     /// The synchronizer for which the package preferences are computed.
     /// If the synchronizer_id was specified in the request, then it matches the request synchronizer_id.
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub synchronizer_id: ::prost::alloc::string::String,
@@ -675,6 +835,10 @@ pub struct GetPreferredPackagesResponse {
 pub enum HashingSchemeVersion {
     Unspecified = 0,
     V2 = 2,
+    V3 = 3,
+    /// Development-protocol-only hashing scheme for LF development-version prepared transactions.
+    /// V4 includes exercise external_call_results in the prepared transaction hash.
+    V4 = 4,
 }
 impl HashingSchemeVersion {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -685,6 +849,8 @@ impl HashingSchemeVersion {
         match self {
             Self::Unspecified => "HASHING_SCHEME_VERSION_UNSPECIFIED",
             Self::V2 => "HASHING_SCHEME_VERSION_V2",
+            Self::V3 => "HASHING_SCHEME_VERSION_V3",
+            Self::V4 => "HASHING_SCHEME_VERSION_V4",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -692,6 +858,8 @@ impl HashingSchemeVersion {
         match value {
             "HASHING_SCHEME_VERSION_UNSPECIFIED" => Some(Self::Unspecified),
             "HASHING_SCHEME_VERSION_V2" => Some(Self::V2),
+            "HASHING_SCHEME_VERSION_V3" => Some(Self::V3),
+            "HASHING_SCHEME_VERSION_V4" => Some(Self::V4),
             _ => None,
         }
     }
@@ -828,6 +996,7 @@ pub mod interactive_submission_service_client {
             self.inner.unary(req, path, codec).await
         }
         /// Execute a prepared submission _asynchronously_ on the ledger.
+        /// Requires `actAs` or `executeAs` scope for the submitting party when LAPI User authorization is enabled
         /// Requires a signature of the transaction from the submitting external party.
         pub async fn execute_submission(
             &mut self,
@@ -859,8 +1028,6 @@ pub mod interactive_submission_service_client {
             self.inner.unary(req, path, codec).await
         }
         /// Similar to ExecuteSubmission but _synchronously_ wait for the completion of the transaction
-        /// IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-        /// A malicious node could make a successfully committed request appeared failed and vice versa
         pub async fn execute_submission_and_wait(
             &mut self,
             request: impl tonic::IntoRequest<super::ExecuteSubmissionAndWaitRequest>,
@@ -891,8 +1058,6 @@ pub mod interactive_submission_service_client {
             self.inner.unary(req, path, codec).await
         }
         /// Similar to ExecuteSubmissionAndWait but additionally returns the transaction
-        /// IMPORTANT: Relying on the response from this endpoint requires trusting the Participant Node to be honest.
-        /// A malicious node could make a successfully committed request appear as failed and vice versa
         pub async fn execute_submission_and_wait_for_transaction(
             &mut self,
             request: impl tonic::IntoRequest<
@@ -924,47 +1089,6 @@ pub mod interactive_submission_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// A preferred package is the highest-versioned package for a provided package-name
-        /// that is vetted by all the participants hosting the provided parties.
-        ///
-        /// Ledger API clients should use this endpoint for constructing command submissions
-        /// that are compatible with the provided preferred package, by making informed decisions on:
-        /// - which are the compatible packages that can be used to create contracts
-        /// - which contract or exercise choice argument version can be used in the command
-        /// - which choices can be executed on a template or interface of a contract
-        ///
-        /// Can be accessed by any Ledger API client with a valid token when Ledger API authorization is enabled.
-        ///
-        /// Provided for backwards compatibility, it will be removed in the Canton version 3.4.0
-        pub async fn get_preferred_package_version(
-            &mut self,
-            request: impl tonic::IntoRequest<super::GetPreferredPackageVersionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetPreferredPackageVersionResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/com.daml.ledger.api.v2.interactive.InteractiveSubmissionService/GetPreferredPackageVersion",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "com.daml.ledger.api.v2.interactive.InteractiveSubmissionService",
-                        "GetPreferredPackageVersion",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
         /// Compute the preferred packages for the vetting requirements in the request.
         /// A preferred package is the highest-versioned package for a provided package-name
         /// that is vetted by all the participants hosting the provided parties.
@@ -979,8 +1103,6 @@ pub mod interactive_submission_service_client {
         /// a `FAILED_PRECONDITION` error will be returned.
         ///
         /// Can be accessed by any Ledger API client with a valid token when Ledger API authorization is enabled.
-        ///
-        /// Experimental API: this endpoint is not guaranteed to provide backwards compatibility in future releases
         pub async fn get_preferred_packages(
             &mut self,
             request: impl tonic::IntoRequest<super::GetPreferredPackagesRequest>,

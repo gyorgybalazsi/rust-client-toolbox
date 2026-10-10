@@ -1,13 +1,13 @@
-// Copyright (c) 2025 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
 package daml_lf;
 
-option java_package = "com.digitalasset.daml.lf.archive";
-option csharp_namespace = "Com.DigitalAsset.Daml.Lf.Archive.DamlLf";
+//import "com/digitalasset/daml/lf/archive/daml_lf2.proto";
 
-import "com/digitalasset/daml/lf/archive/daml_lf2.proto";
+option csharp_namespace = "Com.DigitalAsset.Daml.Lf.Archive.DamlLf";
+option java_package = "com.digitalasset.daml.lf.archive";
 
 message ArchivePayload {
   // this is number 3 for historical reasons -- we had
@@ -54,5 +54,4 @@ message Archive {
   // would be extremely hard (for example protobuf encoding is not
   // canonical) to maintain and does not buy us much.
   string hash = 4;
-
 }

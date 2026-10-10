@@ -1,6 +1,6 @@
 use std::error;
 use std::fs;
-use std::io::{Error, Read, Cursor};
+use std::io::Error;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -10,7 +10,8 @@ const PROTO_ROOT_PATH: &str = "resources/protobuf";
 const PROTO_ARCHIVE_DIR: &str = "com/digitalasset/daml/lf/archive";
 const DESIRED_VERSION_FILE: &str = "daml-sdk-version";
 const PROTO_FILES: &[&str] = &["daml_lf.proto", "daml_lf2.proto"];
-const GITHUB_RELEASE_URL: &str = "https://github.com/digital-asset/daml/releases/download";
+const CANTON_RAW_URL: &str = "https://raw.githubusercontent.com/digital-asset/canton";
+const CANTON_PROTO_DIR: &str = "community/daml-lf/archive/src/main/protobuf/com/digitalasset/daml/lf/archive";
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     ensure_proto_version()?;
@@ -34,7 +35,7 @@ fn ensure_proto_version() -> Result<(), Box<dyn error::Error>> {
         Ok(v) => v.trim().to_string(),
         Err(_) => {
             println!("cargo:warning=No {} file found — skipping proto update. \
-                Create it with the SDK version (e.g. 3.4.11) to enable auto-download.",
+                Create it with the Canton version (e.g. 3.6.1) to enable auto-download.",
                 DESIRED_VERSION_FILE);
             return Ok(());
         }
@@ -60,43 +61,28 @@ fn ensure_proto_version() -> Result<(), Box<dyn error::Error>> {
 }
 
 fn download_and_install_proto(version: &str) -> Result<(), Box<dyn error::Error>> {
-    let url = format!("{}/v{}/protobufs-{}.zip", GITHUB_RELEASE_URL, version, version);
-    let zip_path = format!("{}/protobufs-{}.zip", std::env::var("OUT_DIR")?, version);
-
-    // Download using curl
-    let status = Command::new("curl")
-        .args(["-fSL", "-o", &zip_path, &url])
-        .status()?;
-
-    if !status.success() {
-        return Err(format!(
-            "Failed to download protobufs-{}.zip from {}. \
-            Check that SDK version {} exists at https://github.com/digital-asset/daml/releases",
-            version, url, version
-        ).into());
-    }
-
-    // Extract the Daml-LF archive protos from the zip
-    let zip_bytes = fs::read(&zip_path)?;
-    let mut archive = zip::ZipArchive::new(Cursor::new(zip_bytes))?;
-
+    // Daml-LF protos live in the Canton repository since Canton 3.5
     for proto_file in PROTO_FILES {
-        let proto_entry_name = format!("protos-{}/{}/{}", version, PROTO_ARCHIVE_DIR, proto_file);
-        let mut entry = archive.by_name(&proto_entry_name)
-            .map_err(|e| format!("{} not found in zip: {} (looked for {})", proto_file, e, proto_entry_name))?;
-
-        let mut proto_bytes = Vec::new();
-        entry.read_to_end(&mut proto_bytes)?;
-
+        let url = format!("{}/v{}/{}/{}", CANTON_RAW_URL, version, CANTON_PROTO_DIR, proto_file);
         let target_path = Path::new(PROTO_ROOT_PATH)
             .join(PROTO_ARCHIVE_DIR)
             .join(proto_file);
 
-        fs::write(&target_path, &proto_bytes)?;
-    }
+        // Download using curl
+        let status = Command::new("curl")
+            .args(["-fsSL", "-o"])
+            .arg(&target_path)
+            .arg(&url)
+            .status()?;
 
-    // Clean up zip
-    let _ = fs::remove_file(&zip_path);
+        if !status.success() {
+            return Err(format!(
+                "Failed to download {} from {}. \
+                Check that Canton version {} exists at https://github.com/digital-asset/canton/tags",
+                proto_file, url, version
+            ).into());
+        }
+    }
 
     Ok(())
 }

@@ -16,25 +16,33 @@ pub struct PackageReference {
 /// enriched with the package name and version.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VettedPackage {
-    /// Package ID of this package. Always present.
+    /// Package ID of this package
+    ///
+    /// Required
     #[prost(string, tag = "1")]
     pub package_id: ::prost::alloc::string::String,
     /// The time from which this package is vetted. Empty if vetting time has no
     /// lower bound.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "2")]
     pub valid_from_inclusive: ::core::option::Option<::prost_types::Timestamp>,
     /// The time until which this package is vetted. Empty if vetting time has no
     /// upper bound.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "3")]
     pub valid_until_exclusive: ::core::option::Option<::prost_types::Timestamp>,
     /// Name of this package.
     /// Only available if the package has been uploaded to the current participant.
-    /// If unavailable, is empty string.
+    ///
+    /// Optional
     #[prost(string, tag = "4")]
     pub package_name: ::prost::alloc::string::String,
     /// Version of this package.
     /// Only available if the package has been uploaded to the current participant.
-    /// If unavailable, is empty string.
+    ///
+    /// Optional
     #[prost(string, tag = "5")]
     pub package_version: ::prost::alloc::string::String,
 }
@@ -46,16 +54,24 @@ pub struct VettedPackage {
 pub struct VettedPackages {
     /// Sorted by package_name and package_version where known, and package_id as a
     /// last resort.
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "1")]
     pub packages: ::prost::alloc::vec::Vec<VettedPackage>,
-    /// Participant on which these packages are vetted. Always present.
+    /// Participant on which these packages are vetted.
+    ///
+    /// Required
     #[prost(string, tag = "2")]
     pub participant_id: ::prost::alloc::string::String,
-    /// Synchronizer on which these packages are vetted. Always present.
+    /// Synchronizer on which these packages are vetted.
+    ///
+    /// Required
     #[prost(string, tag = "3")]
     pub synchronizer_id: ::prost::alloc::string::String,
     /// Serial of last ``VettedPackages`` topology transaction of this participant
-    /// and on this synchronizer. Always present.
+    /// and on this synchronizer.
+    ///
+    /// Required
     #[prost(uint32, tag = "4")]
     pub topology_serial: u32,
 }
@@ -63,11 +79,13 @@ pub struct VettedPackages {
 /// participant and synchronizer.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct PriorTopologySerial {
+    /// Optional
     #[prost(oneof = "prior_topology_serial::Serial", tags = "1, 2")]
     pub serial: ::core::option::Option<prior_topology_serial::Serial>,
 }
 /// Nested message and enum types in `PriorTopologySerial`.
 pub mod prior_topology_serial {
+    /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum Serial {
         /// Previous transaction's serial.
@@ -82,22 +100,26 @@ pub mod prior_topology_serial {
 pub struct ListPackagesResponse {
     /// The IDs of all Daml-LF packages supported by the server.
     /// Each element must be a valid PackageIdString (as described in ``value.proto``).
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "1")]
     pub package_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetPackageResponse {
     /// The hash function we use to calculate the hash.
+    ///
     /// Required
     #[prost(enumeration = "HashFunction", tag = "1")]
     pub hash_function: i32,
     /// Contains a ``daml_lf`` ArchivePayload. See further details in ``daml_lf.proto``.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "2")]
     pub archive_payload: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the archive payload, can also used as a ``package_id``.
     /// Must be a valid PackageIdString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub hash: ::prost::alloc::string::String,
@@ -105,6 +127,8 @@ pub struct GetPackageResponse {
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct GetPackageStatusResponse {
     /// The status of the package.
+    ///
+    /// Required
     #[prost(enumeration = "PackageStatus", tag = "1")]
     pub package_status: i32,
 }
@@ -114,6 +138,7 @@ pub struct ListPackagesRequest {}
 pub struct GetPackageRequest {
     /// The ID of the requested package.
     /// Must be a valid PackageIdString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub package_id: ::prost::alloc::string::String,
@@ -122,6 +147,7 @@ pub struct GetPackageRequest {
 pub struct GetPackageStatusRequest {
     /// The ID of the requested package.
     /// Must be a valid PackageIdString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub package_id: ::prost::alloc::string::String,
@@ -137,10 +163,14 @@ pub struct GetPackageStatusRequest {
 pub struct PackageMetadataFilter {
     /// If this list is non-empty, any vetted package with a package ID in this
     /// list will match the filter.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "1")]
     pub package_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// If this list is non-empty, any vetted package with a name matching at least
     /// one prefix in this list will match the filter.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "2")]
     pub package_name_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
@@ -160,20 +190,26 @@ pub struct TopologyStateFilter {
     /// listed in this field match the filter.
     /// Query the current Ledger API's participant's ID via the public
     /// ``GetParticipantId`` command in ``PartyManagementService``.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "1")]
     pub participant_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// If this list is non-empty, only vetted packages from the topology state of
     /// the synchronizers in this list match the filter.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "2")]
     pub synchronizer_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListVettedPackagesRequest {
     /// The package metadata filter the returned vetted packages set must satisfy.
+    ///
     /// Optional
     #[prost(message, optional, tag = "1")]
     pub package_metadata_filter: ::core::option::Option<PackageMetadataFilter>,
     /// The topology filter the returned vetted packages set must satisfy.
+    ///
     /// Optional
     #[prost(message, optional, tag = "2")]
     pub topology_state_filter: ::core::option::Option<TopologyStateFilter>,
@@ -212,10 +248,18 @@ pub struct ListVettedPackagesResponse {
     /// All ``VettedPackages`` that contain at least one ``VettedPackage`` matching
     /// both a ``PackageMetadataFilter`` and a ``TopologyStateFilter``.
     /// Sorted by synchronizer_id then participant_id.
+    ///
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "1")]
     pub vetted_packages: ::prost::alloc::vec::Vec<VettedPackages>,
     /// Pagination token to retrieve the next page.
-    /// Empty string if there are no further results.
+    /// Empty string once there are no further results.
+    ///
+    /// ``PackageMetadataFilter`` is applied after ``TopologyStateFilter`` has already produced a page,
+    /// so that page can end up empty even when it has a next token. Keep following the token until
+    /// there's no token left.
+    ///
+    /// Optional
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
@@ -493,6 +537,7 @@ pub mod package_service_client {
 /// - NameStrings are strings with length <= 1000 that match the regexp ``[A-Za-z\$_][A-Za-z0-9\$_]*``.
 /// - PackageIdStrings are strings with length <= 64 that match the regexp ``\[A-Za-z0-9\-_ \]+``.
 /// - PartyIdStrings are strings with length <= 255 that match the regexp ``\[A-Za-z0-9:\-_ \]+``.
+/// - ParticipantIdStrings are strings with length <= 255 that match the regexp ``\[A-Za-z0-9:\-_ \]+``.
 /// - LedgerStrings are strings with length <= 255 that match the regexp ``\[A-Za-z0-9#:\-_/ \]+``.
 /// - UserIdStrings are strings with length <= 128 that match the regexp ``\[a-zA-Z0-9@^$.!`\-#+'~_|:\]+``.
 ///
@@ -722,11 +767,13 @@ pub mod gen_map {
 /// A command can either create a new contract or exercise a choice on an existing contract.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Command {
+    /// Required
     #[prost(oneof = "command::Command", tags = "1, 2, 4, 3")]
     pub command: ::core::option::Option<command::Command>,
 }
 /// Nested message and enum types in `Command`.
 pub mod command {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Command {
         #[prost(message, tag = "1")]
@@ -750,6 +797,7 @@ pub struct CreateCommand {
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<Identifier>,
     /// The arguments required for creating a contract from this template.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub create_arguments: ::core::option::Option<Record>,
@@ -767,15 +815,18 @@ pub struct ExerciseCommand {
     pub template_id: ::core::option::Option<Identifier>,
     /// The ID of the contract the client wants to exercise upon.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub contract_id: ::prost::alloc::string::String,
     /// The name of the choice the client wants to exercise.
     /// Must be a valid NameString (as described in ``value.proto``)
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub choice: ::prost::alloc::string::String,
     /// The argument for this choice.
+    ///
     /// Required
     #[prost(message, optional, tag = "4")]
     pub choice_argument: ::core::option::Option<Value>,
@@ -791,15 +842,18 @@ pub struct ExerciseByKeyCommand {
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<Identifier>,
     /// The key of the contract the client wants to exercise upon.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub contract_key: ::core::option::Option<Value>,
     /// The name of the choice the client wants to exercise.
     /// Must be a valid NameString (as described in ``value.proto``)
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub choice: ::prost::alloc::string::String,
     /// The argument for this choice.
+    ///
     /// Required
     #[prost(message, optional, tag = "4")]
     pub choice_argument: ::core::option::Option<Value>,
@@ -815,15 +869,18 @@ pub struct CreateAndExerciseCommand {
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<Identifier>,
     /// The arguments required for creating a contract from this template.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub create_arguments: ::core::option::Option<Record>,
     /// The name of the choice the client wants to exercise.
     /// Must be a valid NameString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub choice: ::prost::alloc::string::String,
     /// The argument for this choice.
+    ///
     /// Required
     #[prost(message, optional, tag = "4")]
     pub choice_argument: ::core::option::Option<Value>,
@@ -836,21 +893,25 @@ pub struct DisclosedContract {
     /// The identifier uses the package-id reference format.
     ///
     /// If provided, used to validate the template id of the contract serialized in the created_event_blob.
+    ///
     /// Optional
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<Identifier>,
     /// The contract id
     ///
     /// If provided, used to validate the contract id of the contract serialized in the created_event_blob.
+    ///
     /// Optional
     #[prost(string, tag = "2")]
     pub contract_id: ::prost::alloc::string::String,
     /// Opaque byte string containing the complete payload required by the Daml engine
     /// to reconstruct a contract not known to the receiving participant.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "3")]
     pub created_event_blob: ::prost::alloc::vec::Vec<u8>,
     /// The ID of the synchronizer where the contract is currently assigned
+    ///
     /// Optional
     #[prost(string, tag = "4")]
     pub synchronizer_id: ::prost::alloc::string::String,
@@ -860,6 +921,7 @@ pub struct DisclosedContract {
 pub struct Commands {
     /// Identifier of the on-ledger workflow that this command is a part of.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "1")]
     pub workflow_id: ::prost::alloc::string::String,
@@ -867,6 +929,8 @@ pub struct Commands {
     /// Must be a valid UserIdString (as described in ``value.proto``).
     /// Required unless authentication is used with a user token.
     /// In that case, the token's user-id will be used for the request's user_id.
+    ///
+    /// Optional
     #[prost(string, tag = "2")]
     pub user_id: ::prost::alloc::string::String,
     /// Uniquely identifies the command.
@@ -874,11 +938,13 @@ pub struct Commands {
     /// where act_as is interpreted as a set of party names.
     /// The change ID can be used for matching the intended ledger changes with all their completions.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub command_id: ::prost::alloc::string::String,
     /// Individual elements of this atomic command. Must be non-empty.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "4")]
     pub commands: ::prost::alloc::vec::Vec<Command>,
     /// Lower bound for the ledger time assigned to the resulting transaction.
@@ -886,11 +952,13 @@ pub struct Commands {
     /// Use this property if you expect that command interpretation will take a considerate amount of time, such that by
     /// the time the resulting transaction is sequenced, its assigned ledger time is not valid anymore.
     /// Must not be set at the same time as min_ledger_time_rel.
+    ///
     /// Optional
     #[prost(message, optional, tag = "7")]
     pub min_ledger_time_abs: ::core::option::Option<::prost_types::Timestamp>,
     /// Same as min_ledger_time_abs, but specified as a duration, starting from the time the command is received by the server.
     /// Must not be set at the same time as min_ledger_time_abs.
+    ///
     /// Optional
     #[prost(message, optional, tag = "8")]
     pub min_ledger_time_rel: ::core::option::Option<::prost_types::Duration>,
@@ -898,7 +966,8 @@ pub struct Commands {
     /// If ledger API authorization is enabled, then the authorization metadata must authorize the sender of the request
     /// to act on behalf of each of the given parties.
     /// Each element must be a valid PartyIdString (as described in ``value.proto``).
-    /// Required, must be non-empty.
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "9")]
     pub act_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Set of parties on whose behalf (in addition to all parties listed in ``act_as``) contracts can be retrieved.
@@ -909,7 +978,8 @@ pub struct Commands {
     /// rules for fetch operations.
     /// If ledger API authorization is enabled, then the authorization metadata must authorize the sender of the request
     /// to read contract data on behalf of each of the given parties.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "10")]
     pub read_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// A unique identifier to distinguish completions for different submissions with the same change ID.
@@ -918,32 +988,49 @@ pub struct Commands {
     /// Must be a valid LedgerString (as described in ``value.proto``).
     ///
     /// If omitted, the participant or the committer may set a value of their choice.
+    ///
     /// Optional
     #[prost(string, tag = "11")]
     pub submission_id: ::prost::alloc::string::String,
     /// Additional contracts used to resolve contract & contract key lookups.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "12")]
     pub disclosed_contracts: ::prost::alloc::vec::Vec<DisclosedContract>,
     /// Must be a valid synchronizer id
+    ///
     /// Optional
     #[prost(string, tag = "13")]
     pub synchronizer_id: ::prost::alloc::string::String,
     /// The package-id selection preference of the client for resolving
     /// package names and interface instances in command submission and interpretation
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "14")]
     pub package_id_selection_preference: ::prost::alloc::vec::Vec<
         ::prost::alloc::string::String,
     >,
     /// Fetches the contract keys into the caches to speed up the command processing.
-    /// Should only contain contract keys that are expected to be resolved during interpretation of the commands.
-    /// Keys of disclosed contracts do not need prefetching.
+    /// Each entry specifies a key and a limit on how many contracts to prefetch for that key.
+    /// The limit does not count disclosed contracts, and should reflect the number of
+    /// additional contracts expected to be resolved during interpretation of the commands.
+    /// If a key appears multiple times, the last entry's limit wins.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "15")]
     pub prefetch_contract_keys: ::prost::alloc::vec::Vec<PrefetchContractKey>,
+    /// The maximum number of passes for the Topology-Aware Package Selection (TAPS).
+    /// Higher values can increase the chance of successful package selection for routing of interpreted transactions.
+    /// If unset, this defaults to the value defined in the participant configuration.
+    /// The provided value must not exceed the limit specified in the participant configuration.
+    ///
+    /// Optional
+    #[prost(uint32, optional, tag = "16")]
+    pub taps_max_passes: ::core::option::Option<u32>,
     /// Specifies the deduplication period for the change ID.
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
+    /// Optional
     #[prost(oneof = "commands::DeduplicationPeriod", tags = "5, 6")]
     pub deduplication_period: ::core::option::Option<commands::DeduplicationPeriod>,
 }
@@ -951,6 +1038,8 @@ pub struct Commands {
 pub mod commands {
     /// Specifies the deduplication period for the change ID.
     /// If omitted, the participant will assume the configured maximum deduplication time.
+    ///
+    /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum DeduplicationPeriod {
         /// Specifies the length of the deduplication period.
@@ -975,14 +1064,25 @@ pub struct PrefetchContractKey {
     #[prost(message, optional, tag = "1")]
     pub template_id: ::core::option::Option<Identifier>,
     /// The key of the contract the client wants to prefetch.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub contract_key: ::core::option::Option<Value>,
+    /// The number of contracts to prefetch for this key, if available.
+    /// This is in addition to disclosed contracts.
+    /// - for backward compatibility reason, absence is interpreted as 1
+    /// - 0 is forbidden
+    /// - capped at 2^31 - 1. The system may impose further limits.
+    ///
+    /// Optional
+    #[prost(uint32, optional, tag = "3")]
+    pub limit: ::core::option::Option<u32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReassignmentCommands {
     /// Identifier of the on-ledger workflow that this command is a part of.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "1")]
     pub workflow_id: ::prost::alloc::string::String,
@@ -990,12 +1090,15 @@ pub struct ReassignmentCommands {
     /// Must be a valid UserIdString (as described in ``value.proto``).
     /// Required unless authentication is used with a user token.
     /// In that case, the token's user-id will be used for the request's user_id.
+    ///
+    /// Optional
     #[prost(string, tag = "2")]
     pub user_id: ::prost::alloc::string::String,
     /// Uniquely identifies the command.
     /// The triple (user_id, submitter, command_id) constitutes the change ID for the intended ledger change.
     /// The change ID can be used for matching the intended ledger changes with all their completions.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub command_id: ::prost::alloc::string::String,
@@ -1003,6 +1106,7 @@ pub struct ReassignmentCommands {
     /// If ledger API authorization is enabled, then the authorization metadata must authorize the sender of the request
     /// to act on behalf of the given party.
     /// Must be a valid PartyIdString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "4")]
     pub submitter: ::prost::alloc::string::String,
@@ -1012,20 +1116,25 @@ pub struct ReassignmentCommands {
     /// Must be a valid LedgerString (as described in ``value.proto``).
     ///
     /// If omitted, the participant or the committer may set a value of their choice.
+    ///
     /// Optional
     #[prost(string, tag = "5")]
     pub submission_id: ::prost::alloc::string::String,
     /// Individual elements of this reassignment. Must be non-empty.
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "6")]
     pub commands: ::prost::alloc::vec::Vec<ReassignmentCommand>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReassignmentCommand {
+    /// Required
     #[prost(oneof = "reassignment_command::Command", tags = "1, 2")]
     pub command: ::core::option::Option<reassignment_command::Command>,
 }
 /// Nested message and enum types in `ReassignmentCommand`.
 pub mod reassignment_command {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Command {
         #[prost(message, tag = "1")]
@@ -1039,16 +1148,19 @@ pub mod reassignment_command {
 pub struct UnassignCommand {
     /// The ID of the contract the client wants to unassign.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub contract_id: ::prost::alloc::string::String,
     /// The ID of the source synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub source: ::prost::alloc::string::String,
     /// The ID of the target synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub target: ::prost::alloc::string::String,
@@ -1058,16 +1170,19 @@ pub struct UnassignCommand {
 pub struct AssignCommand {
     /// The ID from the unassigned event to be completed by this assignment.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub reassignment_id: ::prost::alloc::string::String,
     /// The ID of the source synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub source: ::prost::alloc::string::String,
     /// The ID of the target synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub target: ::prost::alloc::string::String,
@@ -1076,6 +1191,7 @@ pub struct AssignCommand {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitRequest {
     /// The commands to be submitted in a single transaction.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub commands: ::core::option::Option<Commands>,
@@ -1085,6 +1201,7 @@ pub struct SubmitResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitReassignmentRequest {
     /// The reassignment command to be submitted.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub reassignment_commands: ::core::option::Option<ReassignmentCommands>,
@@ -1260,25 +1377,37 @@ pub mod command_submission_service_client {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SigningPublicKey {
     /// The serialization format of the public key
+    ///
+    /// Required
     #[prost(enumeration = "CryptoKeyFormat", tag = "1")]
     pub format: i32,
     /// Serialized public key in the format specified above
+    ///
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "2")]
     pub key_data: ::prost::alloc::vec::Vec<u8>,
     /// The key specification
+    ///
+    /// Required
     #[prost(enumeration = "SigningKeySpec", tag = "3")]
     pub key_spec: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Signature {
+    /// Required
     #[prost(enumeration = "SignatureFormat", tag = "1")]
     pub format: i32,
+    /// Required: must be non-empty
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
     /// The fingerprint/id of the keypair used to create this signature and needed to verify.
+    ///
+    /// Required
     #[prost(string, tag = "3")]
     pub signed_by: ::prost::alloc::string::String,
     /// The signing algorithm specification used to produce this signature
+    ///
+    /// Required
     #[prost(enumeration = "SigningAlgorithmSpec", tag = "4")]
     pub signing_algorithm_spec: i32,
 }
@@ -1299,6 +1428,7 @@ pub enum SigningKeySpec {
     /// commonly used in bitcoin and ethereum
     /// as defined in <https://www.secg.org/sec2-v2.pdf>
     EcSecp256k1 = 4,
+    MlDsa65 = 5,
 }
 impl SigningKeySpec {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1312,6 +1442,7 @@ impl SigningKeySpec {
             Self::EcP256 => "SIGNING_KEY_SPEC_EC_P256",
             Self::EcP384 => "SIGNING_KEY_SPEC_EC_P384",
             Self::EcSecp256k1 => "SIGNING_KEY_SPEC_EC_SECP256K1",
+            Self::MlDsa65 => "SIGNING_KEY_SPEC_ML_DSA_65",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1322,6 +1453,7 @@ impl SigningKeySpec {
             "SIGNING_KEY_SPEC_EC_P256" => Some(Self::EcP256),
             "SIGNING_KEY_SPEC_EC_P384" => Some(Self::EcP384),
             "SIGNING_KEY_SPEC_EC_SECP256K1" => Some(Self::EcSecp256k1),
+            "SIGNING_KEY_SPEC_ML_DSA_65" => Some(Self::MlDsa65),
             _ => None,
         }
     }
@@ -1378,6 +1510,7 @@ pub enum SigningAlgorithmSpec {
     EcDsaSha256 = 2,
     /// Elliptic Curve Digital Signature Algorithm with SHA384
     EcDsaSha384 = 3,
+    MlDsa65 = 4,
 }
 impl SigningAlgorithmSpec {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1390,6 +1523,7 @@ impl SigningAlgorithmSpec {
             Self::Ed25519 => "SIGNING_ALGORITHM_SPEC_ED25519",
             Self::EcDsaSha256 => "SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_256",
             Self::EcDsaSha384 => "SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_384",
+            Self::MlDsa65 => "SIGNING_ALGORITHM_SPEC_ML_DSA_65",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1399,6 +1533,7 @@ impl SigningAlgorithmSpec {
             "SIGNING_ALGORITHM_SPEC_ED25519" => Some(Self::Ed25519),
             "SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_256" => Some(Self::EcDsaSha256),
             "SIGNING_ALGORITHM_SPEC_EC_DSA_SHA_384" => Some(Self::EcDsaSha384),
+            "SIGNING_ALGORITHM_SPEC_ML_DSA_65" => Some(Self::MlDsa65),
             _ => None,
         }
     }
@@ -1458,11 +1593,13 @@ impl SignatureFormat {
 /// in question.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Event {
+    /// Required
     #[prost(oneof = "event::Event", tags = "1, 2, 3")]
     pub event: ::core::option::Option<event::Event>,
 }
 /// Nested message and enum types in `Event`.
 pub mod event {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Event {
         /// The event as it appeared in the context of its original daml transaction on this participant node.
@@ -1481,18 +1618,23 @@ pub struct CreatedEvent {
     /// The offset of origin, which has contextual meaning, please see description at messages that include a CreatedEvent.
     /// Offsets are managed by the participant nodes.
     /// Transactions can thus NOT be assumed to have the same offsets on different participant nodes.
-    /// Required, it is a valid absolute offset (positive integer)
+    /// It is a valid absolute offset (positive integer)
+    ///
+    /// Required
     #[prost(int64, tag = "1")]
     pub offset: i64,
     /// The position of this event in the originating transaction or reassignment.
     /// The origin has contextual meaning, please see description at messages that include a CreatedEvent.
     /// Node IDs are not necessarily equal across participants,
     /// as these may see different projections/parts of transactions.
-    /// Required, must be valid node ID (non-negative integer)
+    /// Must be valid node ID (non-negative integer)
+    ///
+    /// Required
     #[prost(int32, tag = "2")]
     pub node_id: i32,
     /// The ID of the created contract.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub contract_id: ::prost::alloc::string::String,
@@ -1504,9 +1646,16 @@ pub struct CreatedEvent {
     pub template_id: ::core::option::Option<Identifier>,
     /// The key of the created contract.
     /// This will be set if and only if ``template_id`` defines a contract key.
+    ///
     /// Optional
     #[prost(message, optional, tag = "5")]
     pub contract_key: ::core::option::Option<Value>,
+    /// The hash of contract_key.
+    /// This will be set if and only if ``template_id`` defines a contract key.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", tag = "16")]
+    pub contract_key_hash: ::prost::alloc::vec::Vec<u8>,
     /// The arguments that have been used to create the contract.
     ///
     /// Required
@@ -1515,7 +1664,8 @@ pub struct CreatedEvent {
     /// Opaque representation of contract create event payload intended for forwarding
     /// to an API server as a contract disclosed as part of a command
     /// submission.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(bytes = "vec", tag = "7")]
     pub created_event_blob: ::prost::alloc::vec::Vec<u8>,
     /// Interface views specified in the transaction filter.
@@ -1525,7 +1675,7 @@ pub struct CreatedEvent {
     /// - and which is implemented by the template of this event,
     /// - and which has ``include_interface_view`` set.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "8")]
     pub interface_views: ::prost::alloc::vec::Vec<InterfaceView>,
     /// The parties that are notified of this event. When a ``CreatedEvent``
@@ -1554,28 +1704,34 @@ pub struct CreatedEvent {
     /// ``UpdateFormat``.  Using these events, query the ACS as-of an offset where the
     /// party is hosted on the participant node, and ignore create events at offsets
     /// where the party is not hosted on the participant node.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "9")]
     pub witness_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The signatories for this contract as specified by the template.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "10")]
     pub signatories: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The observers for this contract as specified explicitly by the template or implicitly as choice controllers.
     /// This field never contains parties that are signatories.
-    /// Required
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "11")]
     pub observers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Ledger effective time of the transaction that created the contract.
+    ///
     /// Required
     #[prost(message, optional, tag = "12")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     /// The package name of the created contract.
+    ///
     /// Required
     #[prost(string, tag = "13")]
     pub package_name: ::prost::alloc::string::String,
     /// Whether this event would be part of respective ACS_DELTA shaped stream,
     /// and should therefore considered when tracking contract activeness on the client-side.
+    ///
     /// Required
     #[prost(bool, tag = "14")]
     pub acs_delta: bool,
@@ -1601,6 +1757,7 @@ pub struct InterfaceView {
     /// Whether the view was successfully computed, and if not,
     /// the reason for the error. The error is reported using the same rules
     /// for error codes and messages as the errors returned for API requests.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub view_status: ::core::option::Option<
@@ -1609,9 +1766,19 @@ pub struct InterfaceView {
     /// The value of the interface's view method on this event.
     /// Set if it was requested in the ``InterfaceFilter`` and it could be
     /// successfully computed.
+    ///
     /// Optional
     #[prost(message, optional, tag = "3")]
     pub view_value: ::core::option::Option<Record>,
+    /// The package defining the interface implementation used to compute the view.
+    /// Can be different from the package that was used to create the contract itself,
+    /// as the contract arguments can be upgraded or downgraded using smart-contract upgrading
+    /// as part of computing the interface view.
+    /// Populated if the view computation is successful, otherwise empty.
+    ///
+    /// Optional
+    #[prost(string, tag = "4")]
+    pub implementation_package_id: ::prost::alloc::string::String,
 }
 /// Records that a contract has been archived, and choices may no longer be exercised on it.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1619,17 +1786,22 @@ pub struct ArchivedEvent {
     /// The offset of origin.
     /// Offsets are managed by the participant nodes.
     /// Transactions can thus NOT be assumed to have the same offsets on different participant nodes.
-    /// Required, it is a valid absolute offset (positive integer)
+    /// It is a valid absolute offset (positive integer)
+    ///
+    /// Required
     #[prost(int64, tag = "1")]
     pub offset: i64,
     /// The position of this event in the originating transaction or reassignment.
     /// Node IDs are not necessarily equal across participants,
     /// as these may see different projections/parts of transactions.
-    /// Required, must be valid node ID (non-negative integer)
+    /// Must be valid node ID (non-negative integer)
+    ///
+    /// Required
     #[prost(int32, tag = "2")]
     pub node_id: i32,
     /// The ID of the archived contract.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub contract_id: ::prost::alloc::string::String,
@@ -1649,10 +1821,12 @@ pub struct ArchivedEvent {
     /// the contract.
     /// Each one of its elements must be a valid PartyIdString (as described
     /// in ``value.proto``).
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "5")]
     pub witness_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The package name of the contract.
+    ///
     /// Required
     #[prost(string, tag = "6")]
     pub package_name: ::prost::alloc::string::String,
@@ -1662,7 +1836,7 @@ pub struct ArchivedEvent {
     ///
     /// If defined, the identifier uses the package-id reference format.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "7")]
     pub implemented_interfaces: ::prost::alloc::vec::Vec<Identifier>,
 }
@@ -1672,17 +1846,22 @@ pub struct ExercisedEvent {
     /// The offset of origin.
     /// Offsets are managed by the participant nodes.
     /// Transactions can thus NOT be assumed to have the same offsets on different participant nodes.
-    /// Required, it is a valid absolute offset (positive integer)
+    /// It is a valid absolute offset (positive integer)
+    ///
+    /// Required
     #[prost(int64, tag = "1")]
     pub offset: i64,
     /// The position of this event in the originating transaction or reassignment.
     /// Node IDs are not necessarily equal across participants,
     /// as these may see different projections/parts of transactions.
-    /// Required, must be valid node ID (non-negative integer)
+    /// Must be valid node ID (non-negative integer)
+    ///
+    /// Required
     #[prost(int32, tag = "2")]
     pub node_id: i32,
     /// The ID of the target contract.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub contract_id: ::prost::alloc::string::String,
@@ -1703,19 +1882,23 @@ pub struct ExercisedEvent {
     pub interface_id: ::core::option::Option<Identifier>,
     /// The choice that was exercised on the target contract.
     /// Must be a valid NameString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "6")]
     pub choice: ::prost::alloc::string::String,
     /// The argument of the exercised choice.
+    ///
     /// Required
     #[prost(message, optional, tag = "7")]
     pub choice_argument: ::core::option::Option<Value>,
     /// The parties that exercised the choice.
     /// Each element must be a valid PartyIdString (as described in ``value.proto``).
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "8")]
     pub acting_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// If true, the target contract may no longer be exercised.
+    ///
     /// Required
     #[prost(bool, tag = "9")]
     pub consuming: bool,
@@ -1735,21 +1918,25 @@ pub struct ExercisedEvent {
     /// ``choice ... controller`` syntax, and said controllers are not
     /// explicitly marked as observers.
     /// Each element must be a valid PartyIdString (as described in ``value.proto``).
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "10")]
     pub witness_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Specifies the upper boundary of the node ids of the events in the same transaction that appeared as a result of
     /// this ``ExercisedEvent``. This allows unambiguous identification of all the members of the subtree rooted at this
     /// node. A full subtree can be constructed when all descendant nodes are present in the stream. If nodes are heavily
     /// filtered, it is only possible to determine if a node is in a consequent subtree or not.
+    ///
     /// Required
     #[prost(int32, tag = "11")]
     pub last_descendant_node_id: i32,
     /// The result of exercising the choice.
-    /// Required
+    ///
+    /// Optional
     #[prost(message, optional, tag = "12")]
     pub exercise_result: ::core::option::Option<Value>,
     /// The package name of the contract.
+    ///
     /// Required
     #[prost(string, tag = "13")]
     pub package_name: ::prost::alloc::string::String,
@@ -1759,20 +1946,55 @@ pub struct ExercisedEvent {
     ///
     /// The identifier uses the package-id reference format.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "14")]
     pub implemented_interfaces: ::prost::alloc::vec::Vec<Identifier>,
     /// Whether this event would be part of respective ACS_DELTA shaped stream,
     /// and should therefore considered when tracking contract activeness on the client-side.
+    ///
     /// Required
     #[prost(bool, tag = "15")]
     pub acs_delta: bool,
 }
+/// OffsetCheckpoints may be used to:
+///
+/// - detect time out of commands.
+/// - provide an offset which can be used to restart consumption.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OffsetCheckpoint {
+    /// The participant's offset, the details of the offset field are described in ``community/ledger-api/README.md``.
+    /// Must be a valid absolute offset (positive integer).
+    ///
+    /// Required
+    #[prost(int64, tag = "1")]
+    pub offset: i64,
+    /// The times associated with each synchronizer at this offset.
+    ///
+    /// Optional: can be empty
+    #[prost(message, repeated, tag = "2")]
+    pub synchronizer_times: ::prost::alloc::vec::Vec<SynchronizerTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SynchronizerTime {
+    /// The id of the synchronizer.
+    ///
+    /// Required
+    #[prost(string, tag = "1")]
+    pub synchronizer_id: ::prost::alloc::string::String,
+    /// All commands with a maximum record time below this value MUST be considered lost if their completion has not arrived before this checkpoint.
+    ///
+    /// Required
+    #[prost(message, optional, tag = "2")]
+    pub record_time: ::core::option::Option<::prost_types::Timestamp>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TraceContext {
     /// <https://www.w3.org/TR/trace-context/>
+    ///
+    /// Optional
     #[prost(string, optional, tag = "1")]
     pub traceparent: ::core::option::Option<::prost::alloc::string::String>,
+    /// Optional
     #[prost(string, optional, tag = "2")]
     pub tracestate: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -1781,27 +2003,34 @@ pub struct TraceContext {
 pub struct Reassignment {
     /// Assigned by the server. Useful for correlating logs.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The ID of the command which resulted in this reassignment. Missing for everyone except the submitting party on the submitting participant.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "2")]
     pub command_id: ::prost::alloc::string::String,
     /// The workflow ID used in reassignment command submission. Only set if the ``workflow_id`` for the command was set.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "3")]
     pub workflow_id: ::prost::alloc::string::String,
     /// The participant's offset. The details of this field are described in ``community/ledger-api/README.md``.
-    /// Required, must be a valid absolute offset (positive integer).
+    /// Must be a valid absolute offset (positive integer).
+    ///
+    /// Required
     #[prost(int64, tag = "4")]
     pub offset: i64,
-    /// The collection of reassignment events. Required.
+    /// The collection of reassignment events.
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "5")]
     pub events: ::prost::alloc::vec::Vec<ReassignmentEvent>,
-    /// Optional; ledger API trace context
+    /// Ledger API trace context
     ///
     /// The trace context transported in this message corresponds to the trace context supplied
     /// by the client application in a HTTP2 header of the original command submission.
@@ -1810,26 +2039,43 @@ pub struct Reassignment {
     /// This field will be populated with the trace context contained in the original submission.
     /// If that was not provided, a unique ledger-api-server generated trace context will be used
     /// instead.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "6")]
     pub trace_context: ::core::option::Option<TraceContext>,
     /// The time at which the reassignment was recorded. The record time refers to the source/target
     /// synchronizer for an unassign/assign event respectively.
+    ///
     /// Required
     #[prost(message, optional, tag = "7")]
     pub record_time: ::core::option::Option<::prost_types::Timestamp>,
     /// A valid synchronizer id.
     /// Identifies the synchronizer that synchronized this Reassignment.
+    ///
     /// Required
     #[prost(string, tag = "8")]
     pub synchronizer_id: ::prost::alloc::string::String,
+    /// The traffic cost that this participant node paid for the corresponding (un)assignment request.
+    ///
+    /// Not set for transactions that were
+    /// - initiated by another participant
+    /// - initiated offline via the repair service
+    /// - processed before the participant started serving traffic cost on the Ledger API
+    /// - returned as part of a query filtering for a non submitting party
+    ///
+    /// Optional
+    #[prost(int64, optional, tag = "9")]
+    pub paid_traffic_cost: ::core::option::Option<i64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReassignmentEvent {
+    /// Required
     #[prost(oneof = "reassignment_event::Event", tags = "1, 2")]
     pub event: ::core::option::Option<reassignment_event::Event>,
 }
 /// Nested message and enum types in `ReassignmentEvent`.
 pub mod reassignment_event {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Event {
         #[prost(message, tag = "1")]
@@ -1843,11 +2089,13 @@ pub mod reassignment_event {
 pub struct UnassignedEvent {
     /// The ID of the unassignment. This needs to be used as an input for a assign ReassignmentCommand.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub reassignment_id: ::prost::alloc::string::String,
     /// The ID of the reassigned contract.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub contract_id: ::prost::alloc::string::String,
@@ -1859,50 +2107,62 @@ pub struct UnassignedEvent {
     pub template_id: ::core::option::Option<Identifier>,
     /// The ID of the source synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "4")]
     pub source: ::prost::alloc::string::String,
     /// The ID of the target synchronizer
     /// Must be a valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "5")]
     pub target: ::prost::alloc::string::String,
     /// Party on whose behalf the unassign command was executed.
     /// Empty if the unassignment happened offline via the repair service.
     /// Must be a valid PartyIdString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "6")]
     pub submitter: ::prost::alloc::string::String,
-    /// Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-    /// with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-    /// equals zero.
+    /// The reassignment counter associated with this unassignment on the source synchronizer.
+    ///
+    /// Reassignment counters strictly increase with each unassign command for the same contract.
+    /// Creation of the contract corresponds to reassignment_counter equal to zero.
+    ///
     /// Required
     #[prost(uint64, tag = "7")]
     pub reassignment_counter: u64,
     /// Assignment exclusivity
     /// Before this time (measured on the target synchronizer), only the submitter of the unassignment can initiate the assignment
     /// Defined for reassigning participants.
+    ///
     /// Optional
     #[prost(message, optional, tag = "8")]
     pub assignment_exclusivity: ::core::option::Option<::prost_types::Timestamp>,
     /// The parties that are notified of this event.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "9")]
     pub witness_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The package name of the contract.
+    ///
     /// Required
     #[prost(string, tag = "10")]
     pub package_name: ::prost::alloc::string::String,
     /// The offset of origin.
     /// Offsets are managed by the participant nodes.
     /// Reassignments can thus NOT be assumed to have the same offsets on different participant nodes.
-    /// Required, it is a valid absolute offset (positive integer)
+    /// Must be a valid absolute offset (positive integer)
+    ///
+    /// Required
     #[prost(int64, tag = "11")]
     pub offset: i64,
     /// The position of this event in the originating reassignment.
     /// Node IDs are not necessarily equal across participants,
     /// as these may see different projections/parts of reassignments.
-    /// Required, must be valid node ID (non-negative integer)
+    /// Must be valid node ID (non-negative integer)
+    ///
+    /// Required
     #[prost(int32, tag = "12")]
     pub node_id: i32,
 }
@@ -1911,35 +2171,42 @@ pub struct UnassignedEvent {
 pub struct AssignedEvent {
     /// The ID of the source synchronizer.
     /// Must be a valid synchronizer id.
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub source: ::prost::alloc::string::String,
     /// The ID of the target synchronizer.
     /// Must be a valid synchronizer id.
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub target: ::prost::alloc::string::String,
     /// The ID from the unassigned event.
     /// For correlation capabilities.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub reassignment_id: ::prost::alloc::string::String,
     /// Party on whose behalf the assign command was executed.
     /// Empty if the assignment happened offline via the repair service.
     /// Must be a valid PartyIdString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "4")]
     pub submitter: ::prost::alloc::string::String,
-    /// Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-    /// with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-    /// equals zero.
+    /// The reassignment counter associated with this assignment on the target synchronizer.
+    ///
+    /// Reassignment counters strictly increase with each unassign command for the same contract.
+    /// Creation of the contract corresponds to reassignment_counter equal to zero.
+    ///
     /// Required
     #[prost(uint64, tag = "5")]
     pub reassignment_counter: u64,
-    /// Required
     /// The offset of this event refers to the offset of the assignment,
     /// while the node_id is the index of within the batch.
+    ///
+    /// Required
     #[prost(message, optional, tag = "6")]
     pub created_event: ::core::option::Option<CreatedEvent>,
 }
@@ -1952,8 +2219,10 @@ pub struct Filters {
     /// also be accumulated.
     /// A template or an interface SHOULD NOT appear twice in the accumulative field.
     /// A wildcard filter SHOULD NOT be defined more than once in the accumulative field.
-    /// Optional, if no ``CumulativeFilter`` defined, the default of a single ``WildcardFilter`` with
+    /// If no ``CumulativeFilter`` defined, the default of a single ``WildcardFilter`` with
     /// include_created_event_blob unset is used.
+    ///
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "1")]
     pub cumulative: ::prost::alloc::vec::Vec<CumulativeFilter>,
 }
@@ -1961,19 +2230,23 @@ pub struct Filters {
 /// the ``template_filters`` or that match one of the ``interface_filters``.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CumulativeFilter {
+    /// Required
     #[prost(oneof = "cumulative_filter::IdentifierFilter", tags = "1, 2, 3")]
     pub identifier_filter: ::core::option::Option<cumulative_filter::IdentifierFilter>,
 }
 /// Nested message and enum types in `CumulativeFilter`.
 pub mod cumulative_filter {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum IdentifierFilter {
         /// A wildcard filter that matches all templates
+        ///
         /// Optional
         #[prost(message, tag = "1")]
         WildcardFilter(super::WildcardFilter),
         /// Include an ``InterfaceView`` for every ``InterfaceFilter`` matching a contract.
         /// The ``InterfaceFilter`` instances MUST each use a unique ``interface_id``.
+        ///
         /// Optional
         #[prost(message, tag = "2")]
         InterfaceFilter(super::InterfaceFilter),
@@ -1981,6 +2254,7 @@ pub mod cumulative_filter {
         /// ``create_arguments`` of a matching ``CreatedEvent``.
         /// If a contract is simultaneously selected by a template filter and one or more interface filters,
         /// the corresponding ``include_created_event_blob`` are consolidated using an OR operation.
+        ///
         /// Optional
         #[prost(message, tag = "3")]
         TemplateFilter(super::TemplateFilter),
@@ -1992,6 +2266,7 @@ pub struct WildcardFilter {
     /// Whether to include a ``created_event_blob`` in the returned ``CreatedEvent``.
     /// Use this to access the contract create event payload in your API client
     /// for submitting it as a disclosed contract with future commands.
+    ///
     /// Optional
     #[prost(bool, tag = "1")]
     pub include_created_event_blob: bool,
@@ -2010,12 +2285,14 @@ pub struct InterfaceFilter {
     pub interface_id: ::core::option::Option<Identifier>,
     /// Whether to include the interface view on the contract in the returned ``CreatedEvent``.
     /// Use this to access contract data in a uniform manner in your API client.
+    ///
     /// Optional
     #[prost(bool, tag = "2")]
     pub include_interface_view: bool,
     /// Whether to include a ``created_event_blob`` in the returned ``CreatedEvent``.
     /// Use this to access the contract create event payload in your API client
     /// for submitting it as a disclosed contract with future commands.
+    ///
     /// Optional
     #[prost(bool, tag = "3")]
     pub include_created_event_blob: bool,
@@ -2035,6 +2312,7 @@ pub struct TemplateFilter {
     /// Whether to include a ``created_event_blob`` in the returned ``CreatedEvent``.
     /// Use this to access the contract event payload in your API client
     /// for submitting it as a disclosed contract with future commands.
+    ///
     /// Optional
     #[prost(bool, tag = "2")]
     pub include_created_event_blob: bool,
@@ -2054,7 +2332,7 @@ pub struct EventFormat {
     /// 2. For **transaction and active-contract-set streams** create and archive events are returned for all contracts whose
     ///     stakeholders include at least one of the listed parties and match the per-party filter.
     ///
-    /// Optional
+    /// Optional: can be empty
     #[prost(map = "string, message", tag = "1")]
     pub filters_by_party: ::std::collections::HashMap<
         ::prost::alloc::string::String,
@@ -2062,11 +2340,13 @@ pub struct EventFormat {
     >,
     /// Wildcard filters that apply to all the parties existing on the participant. The interpretation of the filters is the same
     /// with the per-party filter as described above.
+    ///
     /// Optional
     #[prost(message, optional, tag = "2")]
     pub filters_for_any_party: ::core::option::Option<Filters>,
     /// If enabled, values served over the API will contain more information than strictly necessary to interpret the data.
     /// In particular, setting the verbose flag to true triggers the ledger to include labels for record fields.
+    ///
     /// Optional
     #[prost(bool, tag = "3")]
     pub verbose: bool,
@@ -2079,6 +2359,7 @@ pub struct TransactionFormat {
     #[prost(message, optional, tag = "1")]
     pub event_format: ::core::option::Option<EventFormat>,
     /// What transaction shape to use for interpreting the filters of the event format.
+    ///
     /// Required
     #[prost(enumeration = "TransactionShape", tag = "2")]
     pub transaction_shape: i32,
@@ -2087,7 +2368,9 @@ pub struct TransactionFormat {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TopologyFormat {
     /// Include participant authorization topology events in streams.
-    /// Optional, if unset no participant authorization topology events are emitted in the stream.
+    /// If unset, no participant authorization topology events are emitted in the stream.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "1")]
     pub include_participant_authorization_events: ::core::option::Option<
         ParticipantAuthorizationTopologyFormat,
@@ -2098,6 +2381,8 @@ pub struct TopologyFormat {
 pub struct ParticipantAuthorizationTopologyFormat {
     /// List of parties for which the topology transactions should be sent.
     /// Empty means: for all parties.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "1")]
     pub parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
@@ -2105,16 +2390,22 @@ pub struct ParticipantAuthorizationTopologyFormat {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateFormat {
     /// Include Daml transactions in streams.
-    /// Optional, if unset, no transactions are emitted in the stream.
+    /// If unset, no transactions are emitted in the stream.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "1")]
     pub include_transactions: ::core::option::Option<TransactionFormat>,
     /// Include (un)assignments in the stream.
     /// The events in the result take the shape TRANSACTION_SHAPE_ACS_DELTA.
-    /// Optional, if unset, no (un)assignments are emitted in the stream.
+    /// If unset, no (un)assignments are emitted in the stream.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "2")]
     pub include_reassignments: ::core::option::Option<EventFormat>,
     /// Include topology events in streams.
-    /// Optional, if unset no topology events are emitted in the stream.
+    /// If unset no topology events are emitted in the stream.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "3")]
     pub include_topology_events: ::core::option::Option<TopologyFormat>,
 }
@@ -2157,42 +2448,101 @@ impl TransactionShape {
         }
     }
 }
-/// If the given offset is different than the ledger end, and there are (un)assignments in-flight at the given offset,
-/// the snapshot may fail with "FAILED_PRECONDITION/PARTICIPANT_PRUNED_DATA_ACCESSED".
-/// Note that it is ok to request acs snapshots for party migration with offsets other than ledger end, because party
-/// migration is not concerned with incomplete (un)assignments.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetActiveContractsRequest {
     /// The offset at which the snapshot of the active contracts will be computed.
     /// Must be no greater than the current ledger end offset.
     /// Must be greater than or equal to the last pruning offset.
-    /// Required, must be a valid absolute offset (positive integer) or ledger begin offset (zero).
+    /// Must be a valid absolute offset (positive integer) or ledger begin offset (zero).
     /// If zero, the empty set will be returned.
+    ///
+    /// Required
     #[prost(int64, tag = "3")]
     pub active_at_offset: i64,
     /// Format of the contract_entries in the result. In case of CreatedEvent the presentation will be of
     /// TRANSACTION_SHAPE_ACS_DELTA.
-    /// Optional for backwards compatibility, defaults to an EventFormat where:
     ///
-    /// - filters_by_party is the filter.filters_by_party from this request
-    /// - filters_for_any_party is the filter.filters_for_any_party from this request
-    /// - verbose is the verbose field from this request
+    /// Required
     #[prost(message, optional, tag = "4")]
     pub event_format: ::core::option::Option<EventFormat>,
+    /// Opaque representation of a continuation token defining a position in the active contracts snapshot.
+    /// The prefix of the active contracts snapshot will be omitted up to and including the element from which
+    /// the continuation token was read.
+    /// To reuse the continuation token from a `GetActiveContractsPageResponse`:
+    ///
+    /// - subsequent request must be executed on the same participant with the same version of canton,
+    /// - subsequent request must have the same active_at_offset,
+    /// - subsequent request must have the same event_format
+    /// - and the participant must not have been pruned after the active_at_offset.
+    ///
+    /// If not specified, the whole active contracts snapshot will be returned.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub stream_continuation_token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetActiveContractsPageRequest {
+    /// The offset at which the snapshot of the active contracts will be computed.
+    /// Must be no greater than the current ledger end offset.
+    /// Must be greater than or equal to the last pruning offset.
+    /// Optional, if defined, it must be a valid absolute offset (positive integer) or ledger begin offset (zero).
+    /// If zero, the empty set will be returned.
+    /// If not defined, the current ledger end will be used and it will be populated in the response.
+    ///
+    /// Optional
+    #[prost(int64, optional, tag = "1")]
+    pub active_at_offset: ::core::option::Option<i64>,
+    /// Format of the contract_entries in the result. In case of CreatedEvent the presentation will be of
+    /// TRANSACTION_SHAPE_ACS_DELTA.
+    ///
+    /// Required
+    #[prost(message, optional, tag = "2")]
+    pub event_format: ::core::option::Option<EventFormat>,
+    /// The result page will contain at most max_page_size entries of the respective active contract snapshot.
+    /// The server might reject max_page_size breaching the server-specified limit.
+    /// Optional, if not defined, the default will be determined by the server.
+    ///
+    /// Optional
+    #[prost(int32, optional, tag = "3")]
+    pub max_page_size: ::core::option::Option<i32>,
+    /// To get the next page of the active contracts snapshot, the ``page_token`` should be set to the
+    /// ``next_page_token`` of the last ``GetActiveContractsPageResponse``.
+    /// The page token only works if subsequent requests:
+    ///
+    /// - are executed on the same participant,
+    /// - use the same active_at_offset and event_format,
+    /// - and the participant's store was not pruned to after the active_at_offset.
+    ///
+    /// If not specified, the first page of the active contracts snapshot will be returned.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub page_token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetActiveContractsResponse {
     /// The workflow ID used in command submission which corresponds to the contract_entry. Only set if
     /// the ``workflow_id`` for the command was set.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "1")]
     pub workflow_id: ::prost::alloc::string::String,
+    /// Opaque representation of a continuation token which can be used in the request to bypass the already processed part
+    /// of the active contracts snapshot.
+    /// Only populated for the streaming ``GetActiveContracts`` rpc call.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", tag = "5")]
+    pub stream_continuation_token: ::prost::alloc::vec::Vec<u8>,
     /// For a contract there could be multiple contract_entry-s in the entire snapshot. These together define
     /// the state of one contract in the snapshot.
     /// A contract_entry is included in the result, if and only if there is at least one stakeholder party of the contract
     /// that is hosted on the synchronizer at the time of the event and the party satisfies the
     /// ``TransactionFilter`` in the query.
+    ///
+    /// Required
     #[prost(oneof = "get_active_contracts_response::ContractEntry", tags = "2, 3, 4")]
     pub contract_entry: ::core::option::Option<
         get_active_contracts_response::ContractEntry,
@@ -2205,6 +2555,8 @@ pub mod get_active_contracts_response {
     /// A contract_entry is included in the result, if and only if there is at least one stakeholder party of the contract
     /// that is hosted on the synchronizer at the time of the event and the party satisfies the
     /// ``TransactionFilter`` in the query.
+    ///
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum ContractEntry {
         /// The contract is active on the assigned synchronizer, meaning: there was an activation event on the given synchronizer (
@@ -2227,37 +2579,61 @@ pub mod get_active_contracts_response {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ActiveContract {
+pub struct GetActiveContractsPageResponse {
+    /// The collection of active contracts for this page response.
+    ///
+    /// Required: must be non-empty
+    #[prost(message, repeated, tag = "1")]
+    pub active_contracts: ::prost::alloc::vec::Vec<GetActiveContractsResponse>,
+    /// The active_at_offset which was specified in the request, or the calculated active_at_offset from the actual
+    /// ledger end from at the evaluation of the request.
+    ///
     /// Required
+    #[prost(int64, tag = "2")]
+    pub active_at_offset: i64,
+    /// If not present this is the last page. If present, this token must be used to get the next page.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub next_page_token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ActiveContract {
     /// The event as it appeared in the context of its last update (i.e. daml transaction or
     /// reassignment). In particular, the last offset, node_id pair is preserved.
     /// The last update is the most recent update created or assigned this contract on synchronizer_id synchronizer.
     /// The offset of the CreatedEvent might point to an already pruned update, therefore it cannot necessarily be used
     /// for lookups.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub created_event: ::core::option::Option<CreatedEvent>,
     /// A valid synchronizer id
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub synchronizer_id: ::prost::alloc::string::String,
-    /// Each corresponding assigned and unassigned event has the same reassignment_counter. This strictly increases
-    /// with each unassign command for the same contract. Creation of the contract corresponds to reassignment_counter
-    /// equals zero.
-    /// This field will be the reassignment_counter of the latest observable activation event on this synchronizer, which is
-    /// before the active_at_offset.
+    /// The reassignment counter of this event.
+    ///
+    /// Reassignment counters strictly increase with each unassign command for the same contract. Creation
+    /// of the contract corresponds to a reassignment_counter equal to zero.
+    /// This field will be the reassignment_counter of the latest observable activation event on this synchronizer,
+    /// which is before the active_at_offset.
+    ///
     /// Required
     #[prost(uint64, tag = "3")]
     pub reassignment_counter: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IncompleteUnassigned {
-    /// Required
     /// The event as it appeared in the context of its last activation update (i.e. daml transaction or
     /// reassignment). In particular, the last activation offset, node_id pair is preserved.
     /// The last activation update is the most recent update created or assigned this contract on synchronizer_id synchronizer before
     /// the unassigned_event.
     /// The offset of the CreatedEvent might point to an already pruned update, therefore it cannot necessarily be used
     /// for lookups.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub created_event: ::core::option::Option<CreatedEvent>,
     /// Required
@@ -2275,22 +2651,27 @@ pub struct GetConnectedSynchronizersRequest {
     /// The party of interest
     /// Must be a valid PartyIdString (as described in ``value.proto``).
     /// If empty, all synchronizers this node is connected to will be returned
+    ///
     /// Optional
     #[prost(string, tag = "1")]
     pub party: ::prost::alloc::string::String,
     /// The id of a participant whose mapping of a party to connected synchronizers is requested.
     /// Must be a valid participant-id retrieved through a prior call to getParticipantId.
     /// Defaults to the participant id of the host participant.
+    ///
     /// Optional
     #[prost(string, tag = "2")]
     pub participant_id: ::prost::alloc::string::String,
     /// The ID of the identity provider configured by ``Identity Provider Config``
-    /// Optional, if not set, assume the user is managed by the default identity provider.
+    /// If not set, it's assumed the user is managed by the default identity provider.
+    ///
+    /// Optional
     #[prost(string, tag = "3")]
     pub identity_provider_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConnectedSynchronizersResponse {
+    /// Optional: can be empty
     #[prost(message, repeated, tag = "1")]
     pub connected_synchronizers: ::prost::alloc::vec::Vec<
         get_connected_synchronizers_response::ConnectedSynchronizer,
@@ -2301,29 +2682,49 @@ pub mod get_connected_synchronizers_response {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct ConnectedSynchronizer {
         /// The alias of the synchronizer
+        ///
         /// Required
         #[prost(string, tag = "1")]
         pub synchronizer_alias: ::prost::alloc::string::String,
         /// The ID of the synchronizer
+        ///
         /// Required
         #[prost(string, tag = "2")]
         pub synchronizer_id: ::prost::alloc::string::String,
         /// The permission on the synchronizer
         /// Set if a party was used in the request, otherwise unspecified.
+        ///
         /// Optional
         #[prost(enumeration = "super::ParticipantPermission", tag = "3")]
         pub permission: i32,
     }
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
-pub struct GetLedgerEndRequest {}
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetLedgerEndRequest {
+    /// Provide synchronizer_times for the specified synchronizers in the response.
+    /// If none are specified, only offset will be present in the response.
+    /// If the request includes a synchronizer for which no updates were observed, it will be omitted in the output.
+    /// If the request includes a synchronizer that participant was never connected to, it will be omitted in the output.
+    ///
+    /// Optional: can be empty
+    #[prost(string, repeated, tag = "1")]
+    pub synchronizer_id: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetLedgerEndResponse {
     /// It will always be a non-negative integer.
     /// If zero, the participant view of the ledger is empty.
     /// If positive, the absolute offset of the ledger as viewed by the participant.
+    ///
+    /// Optional
     #[prost(int64, tag = "1")]
     pub offset: i64,
+    /// Final record times observed by this participant for each of the requested synchronizers.
+    /// If there is no connection to a sequencer, corresponding record time can be arbitrarily far back in the past.
+    ///
+    /// Optional: can be empty
+    #[prost(message, repeated, tag = "2")]
+    pub synchronizer_times: ::prost::alloc::vec::Vec<SynchronizerTime>,
 }
 /// Empty for now, but may contain fields in the future.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -2334,6 +2735,8 @@ pub struct GetLatestPrunedOffsetsResponse {
     /// If positive, the absolute offset up to which the ledger has been pruned,
     /// disregarding the state of all divulged contracts pruning.
     /// If zero, the ledger has not been pruned yet.
+    ///
+    /// Optional
     #[prost(int64, tag = "1")]
     pub participant_pruned_up_to_inclusive: i64,
     /// It will always be a non-negative integer.
@@ -2342,8 +2745,32 @@ pub struct GetLatestPrunedOffsetsResponse {
     /// For more details about all divulged events pruning,
     /// see ``PruneRequest.prune_all_divulged_contracts`` in ``participant_pruning_service.proto``.
     /// If zero, the divulged events have not been pruned yet.
+    ///
+    /// Optional
     #[prost(int64, tag = "2")]
     pub all_divulged_contracts_pruned_up_to_inclusive: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConvertRecordTimeToOffsetRequest {
+    /// The record time to be converted to an offset
+    /// Required
+    #[prost(message, optional, tag = "1")]
+    pub record_time: ::core::option::Option<::prost_types::Timestamp>,
+    /// The ID of the synchronizer
+    /// Must be a synchronizer from which the participant had received at least one update ever.
+    ///
+    /// Required
+    #[prost(string, tag = "2")]
+    pub synchronizer_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ConvertRecordTimeToOffsetResponse {
+    /// The participant's offset, the details of the offset field are described in ``community/ledger-api/README.md``.
+    /// Must be a valid absolute offset (positive integer).
+    ///
+    /// Required
+    #[prost(int64, tag = "1")]
+    pub offset: i64,
 }
 /// Enum indicating the permission level that the participant has for the party
 /// whose connected synchronizers are being listed.
@@ -2478,6 +2905,10 @@ pub mod state_service_client {
         /// the client SHOULD begin streaming updates from the update service,
         /// starting at the GetActiveContractsRequest.active_at_offset specified in this request.
         /// Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
+        /// If the given offset is different than the ledger end, and there are (un)assignments in-flight at the given offset,
+        /// the snapshot may fail with "FAILED_PRECONDITION/PARTICIPANT_PRUNED_DATA_ACCESSED".
+        /// Note that it is ok to request acs snapshots for party migration with offsets other than ledger end, because party
+        /// migration is not concerned with incomplete (un)assignments.
         pub async fn get_active_contracts(
             &mut self,
             request: impl tonic::IntoRequest<super::GetActiveContractsRequest>,
@@ -2506,6 +2937,40 @@ pub mod state_service_client {
                     ),
                 );
             self.inner.server_streaming(req, path, codec).await
+        }
+        /// Returns a page of the snapshot of the active contracts and incomplete (un)assignments at a ledger offset.
+        /// Once all pages are fetched by repeated calls to ``GetActiveContractsPage``,
+        /// the client SHOULD begin retrieving updates from the update service,
+        /// starting at the ``GetActiveContractsPageResponse``.``active_at_offset`` specified in this request.
+        /// Clients SHOULD NOT assume that the set of active contracts they receive reflects the state at the ledger end.
+        pub async fn get_active_contracts_page(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetActiveContractsPageRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetActiveContractsPageResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.StateService/GetActiveContractsPage",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.StateService",
+                        "GetActiveContractsPage",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
         }
         /// Get the list of connected synchronizers at the time of the query.
         pub async fn get_connected_synchronizers(
@@ -2598,55 +3063,216 @@ pub mod state_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Translate syncrhonizer record time to an offset
+        /// If the requested record time is earlier that the earliest record time known for the given synchronizer
+        /// (either because is is before the connection to the synchronizer was established or because it was already pruned),
+        /// the request fails with RECORD_TIME_NOT_FOUND error.
+        /// If the requested record time is after the latest record time observed for this synchronizer, the request fails with
+        /// RECORD_TIME_NOT_OBSERVED_YET error code. This may be transitional condition until participant node catches up with most recent synchronizer updates.
+        /// In such case the caller may retry this request.
+        pub async fn convert_record_time_to_offset(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ConvertRecordTimeToOffsetRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ConvertRecordTimeToOffsetResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.StateService/ConvertRecordTimeToOffset",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.StateService",
+                        "ConvertRecordTimeToOffset",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
-/// OffsetCheckpoints may be used to:
-///
-/// - detect time out of commands.
-/// - provide an offset which can be used to restart consumption.
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OffsetCheckpoint {
-    /// The participant's offset, the details of the offset field are described in ``community/ledger-api/README.md``.
-    /// Required, must be a valid absolute offset (positive integer).
-    #[prost(int64, tag = "1")]
-    pub offset: i64,
-    #[prost(message, repeated, tag = "2")]
-    pub synchronizer_times: ::prost::alloc::vec::Vec<SynchronizerTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SynchronizerTime {
-    /// The id of the synchronizer.
+pub struct GetJwksRequest {
+    /// The synchronizer containing the signing public keys for the party
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub synchronizer_id: ::prost::alloc::string::String,
-    /// All commands with a maximum record time below this value MUST be considered lost if their completion has not arrived before this checkpoint.
+    /// The party to request the JWKS for
+    ///
     /// Required
-    #[prost(message, optional, tag = "2")]
-    pub record_time: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "2")]
+    pub party_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetJwksResponse {
+    /// List of JWKs for the specified party and synchronizer.
+    /// Only keys of which the usage allows for Party JWT authentication will be returned.
+    ///
+    /// Optional: can be empty
+    #[prost(string, repeated, tag = "1")]
+    pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// Generated client implementations.
+pub mod jose_service_client {
+    #![allow(
+        unused_variables,
+        dead_code,
+        missing_docs,
+        clippy::wildcard_imports,
+        clippy::let_unit_value,
+    )]
+    use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
+    /// Allows clients to access JOSE (JSON Object Signing and Encryption) primitives
+    /// to use for authentication
+    #[derive(Debug, Clone)]
+    pub struct JoseServiceClient<T> {
+        inner: tonic::client::Grpc<T>,
+    }
+    impl JoseServiceClient<tonic::transport::Channel> {
+        /// Attempt to create a new client by connecting to a given endpoint.
+        pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+        where
+            D: TryInto<tonic::transport::Endpoint>,
+            D::Error: Into<StdError>,
+        {
+            let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
+            Ok(Self::new(conn))
+        }
+    }
+    impl<T> JoseServiceClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::Body>,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+    {
+        pub fn new(inner: T) -> Self {
+            let inner = tonic::client::Grpc::new(inner);
+            Self { inner }
+        }
+        pub fn with_origin(inner: T, origin: Uri) -> Self {
+            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            Self { inner }
+        }
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> JoseServiceClient<InterceptedService<T, F>>
+        where
+            F: tonic::service::Interceptor,
+            T::ResponseBody: Default,
+            T: tonic::codegen::Service<
+                http::Request<tonic::body::Body>,
+                Response = http::Response<
+                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                >,
+            >,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::Body>,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+        {
+            JoseServiceClient::new(InterceptedService::new(inner, interceptor))
+        }
+        /// Compress requests with the given encoding.
+        ///
+        /// This requires the server to support it otherwise it might respond with an
+        /// error.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.send_compressed(encoding);
+            self
+        }
+        /// Enable decompressing responses.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.accept_compressed(encoding);
+            self
+        }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
+        pub async fn get_jwks(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetJwksRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetJwksResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.JoseService/GetJwks",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("com.daml.ledger.api.v2.JoseService", "GetJwks"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+    }
 }
 /// A completion represents the status of a submitted command on the ledger: it can be successful or failed.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Completion {
     /// The ID of the succeeded or failed command.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub command_id: ::prost::alloc::string::String,
     /// Identifies the exact type of the error.
     /// It uses the same format of conveying error details as it is used for the RPC responses of the APIs.
+    ///
     /// Optional
     #[prost(message, optional, tag = "2")]
     pub status: ::core::option::Option<
         super::super::super::super::super::google::rpc::Status,
     >,
     /// The update_id of the transaction or reassignment that resulted from the command with command_id.
+    ///
     /// Only set for successfully executed commands.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
+    /// Optional
     #[prost(string, tag = "3")]
     pub update_id: ::prost::alloc::string::String,
     /// The user-id that was used for the submission, as described in ``commands.proto``.
     /// Must be a valid UserIdString (as described in ``value.proto``).
-    /// Optional for historic completions where this data is not available.
+    ///
+    /// Required
     #[prost(string, tag = "4")]
     pub user_id: ::prost::alloc::string::String,
     /// The set of parties on whose behalf the commands were executed.
@@ -2654,15 +3280,17 @@ pub struct Completion {
     /// filtered to the requesting parties in CompletionStreamRequest.
     /// The order of the parties need not be the same as in the submission.
     /// Each element must be a valid PartyIdString (as described in ``value.proto``).
-    /// Optional for historic completions where this data is not available.
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "5")]
     pub act_as: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// The submission ID this completion refers to, as described in ``commands.proto``.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "6")]
     pub submission_id: ::prost::alloc::string::String,
-    /// Optional; ledger API trace context
+    /// The Ledger API trace context
     ///
     /// The trace context transported in this message corresponds to the trace context supplied
     /// by the client application in a HTTP2 header of the original command submission.
@@ -2671,10 +3299,14 @@ pub struct Completion {
     /// This field will be populated with the trace context contained in the original submission.
     /// If that was not provided, a unique ledger-api-server generated trace context will be used
     /// instead.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "9")]
     pub trace_context: ::core::option::Option<TraceContext>,
     /// May be used in a subsequent CompletionStreamRequest to resume the consumption of this stream at a later time.
-    /// Required, must be a valid absolute offset (positive integer).
+    /// Must be a valid absolute offset (positive integer).
+    ///
+    /// Required
     #[prost(int64, tag = "10")]
     pub offset: i64,
     /// The synchronizer along with its record time.
@@ -2687,13 +3319,56 @@ pub struct Completion {
     /// Required
     #[prost(message, optional, tag = "11")]
     pub synchronizer_time: ::core::option::Option<SynchronizerTime>,
+    /// The traffic cost paid by this participant node for the confirmation request
+    /// for the submitted command.
+    ///
+    /// Commands whose execution is rejected before their corresponding
+    /// confirmation request is ordered by the synchronizer will report a paid
+    /// traffic cost of zero.
+    /// If a confirmation request is ordered for a command, but the request fails
+    /// (e.g., due to contention with a concurrent contract archival), the traffic
+    /// cost is paid and reported on the failed completion for the request.
+    ///
+    /// If you want to correlate the traffic cost of a successful completion
+    /// with the transaction that resulted from the command, you can use the
+    /// ``offset`` field to retrieve the transaction using
+    /// ``UpdateService.GetUpdateByOffset`` on the same participant node; or alternatively use the ``update_id``
+    /// field to retrieve the transaction using ``UpdateService.GetUpdateById`` on any participant node
+    /// that sees the transaction.
+    ///
+    /// Note: for completions processed before the participant started serving
+    /// traffic cost on the Ledger API, this field will be set to zero.
+    /// Additionally, the total cost incurred by the submitting node for the submission of the transaction may be greater
+    /// than the reported cost, for example if retries were issued due to failed submissions to the synchronizer.
+    /// The cost reported here is the one paid for ordering the confirmation request.
+    ///
+    /// Optional
+    #[prost(int64, tag = "12")]
+    pub paid_traffic_cost: i64,
+    /// The transaction hash signed by the external party for prepared transactions
+    /// that were submitted using `InteractiveSubmissionService.ExecuteSubmission`
+    /// or one of its variants.
+    ///
+    /// Use this to correlate prepared transactions with their execution result
+    /// on the *same participant* that executed the transaction.
+    ///
+    /// Not available for:
+    ///
+    /// - transactions executed on Canton versions prior to 3.5
+    /// - transactions of internal parties submitted using `CommandSubmissionService.Submit` and its variants
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "13")]
+    pub transaction_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// The actual deduplication window used for the submission, which is derived from
     /// ``Commands.deduplication_period``. The ledger may convert the deduplication period into other
     /// descriptions and extend the period in implementation-specified ways.
     ///
     /// Used to audit the deduplication guarantee described in ``commands.proto``.
     ///
-    /// Optional; the deduplication guarantee applies even if the completion omits this field.
+    /// The deduplication guarantee applies even if the completion omits this field.
+    ///
+    /// Optional
     #[prost(oneof = "completion::DeduplicationPeriod", tags = "7, 8")]
     pub deduplication_period: ::core::option::Option<completion::DeduplicationPeriod>,
 }
@@ -2705,7 +3380,9 @@ pub mod completion {
     ///
     /// Used to audit the deduplication guarantee described in ``commands.proto``.
     ///
-    /// Optional; the deduplication guarantee applies even if the completion omits this field.
+    /// The deduplication guarantee applies even if the completion omits this field.
+    ///
+    /// Optional
     #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
     pub enum DeduplicationPeriod {
         /// Specifies the start of the deduplication period by a completion stream offset (exclusive).
@@ -2724,8 +3401,10 @@ pub mod completion {
 /// See the feature message definitions for descriptions.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ExperimentalFeatures {
+    /// Optional
     #[prost(message, optional, tag = "1")]
     pub static_time: ::core::option::Option<ExperimentalStaticTime>,
+    /// Optional
     #[prost(message, optional, tag = "2")]
     pub command_inspection_service: ::core::option::Option<
         ExperimentalCommandInspectionService,
@@ -2734,18 +3413,21 @@ pub struct ExperimentalFeatures {
 /// Ledger is in the static time mode and exposes a time service.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ExperimentalStaticTime {
+    /// Required
     #[prost(bool, tag = "1")]
     pub supported: bool,
 }
 /// Whether the Ledger API supports command inspection service
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ExperimentalCommandInspectionService {
+    /// Required
     #[prost(bool, tag = "1")]
     pub supported: bool,
 }
 /// Whether the Ledger API supports party events
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ExperimentalPartyTopologyEvents {
+    /// Required
     #[prost(bool, tag = "1")]
     pub supported: bool,
 }
@@ -2754,6 +3436,8 @@ pub struct GetLedgerApiVersionRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetLedgerApiVersionResponse {
     /// The version of the ledger API.
+    ///
+    /// Required
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
     /// The features supported by this Ledger API endpoint.
@@ -2765,6 +3449,8 @@ pub struct GetLedgerApiVersionResponse {
     ///
     /// See the feature descriptions themselves for the relation between
     /// Ledger API versions and feature presence.
+    ///
+    /// Required
     #[prost(message, optional, tag = "2")]
     pub features: ::core::option::Option<FeaturesDescriptor>,
 }
@@ -2774,46 +3460,64 @@ pub struct FeaturesDescriptor {
     /// for ledger implementation testing purposes only.
     ///
     /// Daml applications SHOULD not depend on these in production.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub experimental: ::core::option::Option<ExperimentalFeatures>,
     /// If set, then the Ledger API server supports user management.
     /// It is recommended that clients query this field to gracefully adjust their behavior for
     /// ledgers that do not support user management.
+    ///
+    /// Required
     #[prost(message, optional, tag = "2")]
     pub user_management: ::core::option::Option<UserManagementFeature>,
     /// If set, then the Ledger API server supports party management configurability.
     /// It is recommended that clients query this field to gracefully adjust their behavior to
     /// maximum party page size.
+    ///
+    /// Required
     #[prost(message, optional, tag = "3")]
     pub party_management: ::core::option::Option<PartyManagementFeature>,
     /// It contains the timeouts related to the periodic offset checkpoint emission
+    ///
+    /// Required
     #[prost(message, optional, tag = "4")]
     pub offset_checkpoint: ::core::option::Option<OffsetCheckpointFeature>,
     /// If set, then the Ledger API server supports package listing
     /// configurability. It is recommended that clients query this field to
     /// gracefully adjust their behavior to maximum package listing page size.
+    ///
+    /// Required
     #[prost(message, optional, tag = "5")]
     pub package_feature: ::core::option::Option<PackageFeature>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct UserManagementFeature {
     /// Whether the Ledger API server provides the user management service.
+    ///
+    /// Required
     #[prost(bool, tag = "1")]
     pub supported: bool,
     /// The maximum number of rights that can be assigned to a single user.
     /// Servers MUST support at least 100 rights per user.
     /// A value of 0 means that the server enforces no rights per user limit.
+    ///
+    /// Required
     #[prost(int32, tag = "2")]
     pub max_rights_per_user: i32,
     /// The maximum number of users the server can return in a single response (page).
     /// Servers MUST support at least a 100 users per page.
     /// A value of 0 means that the server enforces no page size limit.
+    ///
+    /// Required
     #[prost(int32, tag = "3")]
     pub max_users_page_size: i32,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct PartyManagementFeature {
     /// The maximum number of parties the server can return in a single response (page).
+    ///
+    /// Required
     #[prost(int32, tag = "1")]
     pub max_parties_page_size: i32,
 }
@@ -2821,12 +3525,16 @@ pub struct PartyManagementFeature {
 pub struct PackageFeature {
     /// The maximum number of vetted packages the server can return in a single
     /// response (page) when listing them.
+    ///
+    /// Required
     #[prost(int32, tag = "1")]
     pub max_vetted_packages_page_size: i32,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct OffsetCheckpointFeature {
     /// The maximum delay to emmit a new OffsetCheckpoint if it exists
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub max_offset_checkpoint_emission_delay: ::core::option::Option<
         ::prost_types::Duration,
@@ -2960,29 +3668,35 @@ pub mod version_service_client {
 pub struct TopologyTransaction {
     /// Assigned by the server. Useful for correlating logs.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The absolute offset. The details of this field are described in ``community/ledger-api/README.md``.
-    /// Required, it is a valid absolute offset (positive integer).
+    /// It is a valid absolute offset (positive integer).
+    ///
+    /// Required
     #[prost(int64, tag = "2")]
     pub offset: i64,
     /// A valid synchronizer id.
     /// Identifies the synchronizer that synchronized the topology transaction.
+    ///
     /// Required
     #[prost(string, tag = "3")]
     pub synchronizer_id: ::prost::alloc::string::String,
     /// The time at which the changes in the topology transaction become effective. There is a small delay between a
     /// topology transaction being sequenced and the changes it contains becoming effective. Topology transactions appear
     /// in order relative to a synchronizer based on their effective time rather than their sequencing time.
+    ///
     /// Required
     #[prost(message, optional, tag = "4")]
     pub record_time: ::core::option::Option<::prost_types::Timestamp>,
     /// A non-empty list of topology events.
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "5")]
     pub events: ::prost::alloc::vec::Vec<TopologyEvent>,
-    /// Optional; ledger API trace context
+    /// Ledger API trace context
     ///
     /// The trace context transported in this message corresponds to the trace context supplied
     /// by the client application in a HTTP2 header of the original command submission.
@@ -2991,16 +3705,20 @@ pub struct TopologyTransaction {
     /// This field will be populated with the trace context contained in the original submission.
     /// If that was not provided, a unique ledger-api-server generated trace context will be used
     /// instead.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "6")]
     pub trace_context: ::core::option::Option<TraceContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TopologyEvent {
-    #[prost(oneof = "topology_event::Event", tags = "1, 2, 3")]
+    /// Required
+    #[prost(oneof = "topology_event::Event", tags = "1, 2, 3, 4")]
     pub event: ::core::option::Option<topology_event::Event>,
 }
 /// Nested message and enum types in `TopologyEvent`.
 pub mod topology_event {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Event {
         #[prost(message, tag = "1")]
@@ -3009,6 +3727,8 @@ pub mod topology_event {
         ParticipantAuthorizationRevoked(super::ParticipantAuthorizationRevoked),
         #[prost(message, tag = "3")]
         ParticipantAuthorizationAdded(super::ParticipantAuthorizationAdded),
+        #[prost(message, tag = "4")]
+        ParticipantAuthorizationOnboarding(super::ParticipantAuthorizationOnboarding),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3044,25 +3764,41 @@ pub struct ParticipantAuthorizationRevoked {
     #[prost(string, tag = "2")]
     pub participant_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ParticipantAuthorizationOnboarding {
+    /// Required
+    #[prost(string, tag = "1")]
+    pub party_id: ::prost::alloc::string::String,
+    /// Required
+    #[prost(string, tag = "2")]
+    pub participant_id: ::prost::alloc::string::String,
+    /// Required
+    #[prost(enumeration = "ParticipantPermission", tag = "3")]
+    pub participant_permission: i32,
+}
 /// Filtered view of an on-ledger transaction's create and archive events.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Transaction {
     /// Assigned by the server. Useful for correlating logs.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The ID of the command which resulted in this transaction. Missing for everyone except the submitting party.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "2")]
     pub command_id: ::prost::alloc::string::String,
     /// The workflow ID used in command submission.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Optional
     #[prost(string, tag = "3")]
     pub workflow_id: ::prost::alloc::string::String,
     /// Ledger effective time.
+    ///
     /// Required
     #[prost(message, optional, tag = "4")]
     pub effective_at: ::core::option::Option<::prost_types::Timestamp>,
@@ -3072,19 +3808,22 @@ pub struct Transaction {
     /// - ``CreatedEvent`` or ``ArchivedEvent`` in case of ACS_DELTA transaction shape
     /// - ``CreatedEvent`` or ``ExercisedEvent`` in case of LEDGER_EFFECTS transaction shape
     ///
-    /// Required
+    /// Required: must be non-empty
     #[prost(message, repeated, tag = "5")]
     pub events: ::prost::alloc::vec::Vec<Event>,
     /// The absolute offset. The details of this field are described in ``community/ledger-api/README.md``.
-    /// Required, it is a valid absolute offset (positive integer).
+    /// It is a valid absolute offset (positive integer).
+    ///
+    /// Required
     #[prost(int64, tag = "6")]
     pub offset: i64,
     /// A valid synchronizer id.
     /// Identifies the synchronizer that synchronized the transaction.
+    ///
     /// Required
     #[prost(string, tag = "7")]
     pub synchronizer_id: ::prost::alloc::string::String,
-    /// Optional; ledger API trace context
+    /// Ledger API trace context
     ///
     /// The trace context transported in this message corresponds to the trace context supplied
     /// by the client application in a HTTP2 header of the original command submission.
@@ -3093,56 +3832,94 @@ pub struct Transaction {
     /// This field will be populated with the trace context contained in the original submission.
     /// If that was not provided, a unique ledger-api-server generated trace context will be used
     /// instead.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "8")]
     pub trace_context: ::core::option::Option<TraceContext>,
     /// The time at which the transaction was recorded. The record time refers to the synchronizer
     /// which synchronized the transaction.
+    ///
     /// Required
     #[prost(message, optional, tag = "9")]
     pub record_time: ::core::option::Option<::prost_types::Timestamp>,
+    /// Deprecated: please use ``transaction_hash`` which has the same value.
     /// For transaction externally signed, contains the external transaction hash
     /// signed by the external party. Can be used to correlate an external submission with a committed transaction.
-    /// Optional
+    ///
+    /// Optional: can be empty
     #[prost(bytes = "vec", optional, tag = "10")]
     pub external_transaction_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The traffic cost that this participant node paid for the confirmation
+    /// request for this transaction.
+    ///
+    /// Not set for transactions that were
+    /// - initiated by another participant
+    /// - initiated offline via the repair service
+    /// - processed before the participant started serving traffic cost on the Ledger API
+    /// - returned as part of a query filtering for a non submitting party
+    ///
+    /// Optional
+    #[prost(int64, optional, tag = "11")]
+    pub paid_traffic_cost: ::core::option::Option<i64>,
+    /// The transaction hash signed by the external party for prepared transactions
+    /// that were submitted using `InteractiveSubmissionService.ExecuteSubmission`
+    /// or one of its variants.
+    ///
+    /// Use this to correlate prepared transactions with their execution result
+    /// on the *same participant* that executed the transaction.
+    ///
+    /// Not available for:
+    ///
+    /// - transactions executed on Canton versions prior to 3.6
+    /// - transactions of internal parties submitted using `CommandSubmissionService.Submit` and its variants
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "12")]
+    pub transaction_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
+/// Exclusive lower bound offset of the requested ledger section (non-negative integer).
+/// The response will only contain transactions whose offset is strictly greater than this.
+/// If set to zero, the lower bound is set to the beginning of the ledger.
+/// If the participant has been pruned, this parameter must be greater or equal than the pruning offset.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetUpdatesRequest {
-    /// Beginning of the requested ledger section (non-negative integer).
-    /// The response will only contain transactions whose offset is strictly greater than this.
-    /// If zero, the stream will start from the beginning of the ledger.
-    /// If positive, the streaming will start after this absolute offset.
-    /// If the ledger has been pruned, this parameter must be specified and be greater than the pruning offset.
+    /// Required
     #[prost(int64, tag = "1")]
     pub begin_exclusive: i64,
-    /// End of the requested ledger section.
-    /// The response will only contain transactions whose offset is less than or equal to this.
-    /// Optional, if empty, the stream will not terminate.
-    /// If specified, the stream will terminate after this absolute offset (positive integer) is reached.
+    /// Inclusive higher bound offset of the requested ledger section.
+    /// If specified the response will only contain transactions whose offset is less than or equal to this.
+    /// If not specified,
+    ///
+    /// - the descending_order must not be selected,
+    /// - the stream will not terminate.
+    ///
+    /// Optional
     #[prost(int64, optional, tag = "2")]
     pub end_inclusive: ::core::option::Option<i64>,
-    /// Must be unset for GetUpdateTrees request.
-    /// Optional for backwards compatibility for GetUpdates request: defaults to an UpdateFormat where:
+    /// The update format for this request
     ///
-    /// - include_transactions.event_format.filters_by_party = the filter.filters_by_party on this request
-    /// - include_transactions.event_format.filters_for_any_party = the filter.filters_for_any_party on this request
-    /// - include_transactions.event_format.verbose = the same flag specified on this request
-    /// - include_transactions.transaction_shape = TRANSACTION_SHAPE_ACS_DELTA
-    /// - include_reassignments.filter = the same filter specified on this request
-    /// - include_reassignments.verbose = the same flag specified on this request
-    /// - include_topology_events.include_participant_authorization_events.parties = all the parties specified in filter
+    /// Required
     #[prost(message, optional, tag = "5")]
     pub update_format: ::core::option::Option<UpdateFormat>,
+    /// If set, the stream will populate the elements in descending order.
+    ///
+    /// Optional
+    #[prost(bool, tag = "6")]
+    pub descending_order: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetUpdatesResponse {
     /// The update that matches the filter in the request.
+    ///
+    /// Required
     #[prost(oneof = "get_updates_response::Update", tags = "1, 2, 3, 4")]
     pub update: ::core::option::Option<get_updates_response::Update>,
 }
 /// Nested message and enum types in `GetUpdatesResponse`.
 pub mod get_updates_response {
     /// The update that matches the filter in the request.
+    ///
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Update {
         #[prost(message, tag = "1")]
@@ -3159,10 +3936,12 @@ pub mod get_updates_response {
 pub struct GetUpdateByOffsetRequest {
     /// The offset of the update being looked up.
     /// Must be a valid absolute offset (positive integer).
+    ///
     /// Required
     #[prost(int64, tag = "1")]
     pub offset: i64,
     /// The format for the update.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub update_format: ::core::option::Option<UpdateFormat>,
@@ -3171,10 +3950,25 @@ pub struct GetUpdateByOffsetRequest {
 pub struct GetUpdateByIdRequest {
     /// The ID of a particular update.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The format for the update.
+    ///
+    /// Required
+    #[prost(message, optional, tag = "2")]
+    pub update_format: ::core::option::Option<UpdateFormat>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetUpdateByHashRequest {
+    /// The transaction hash to look up.
+    ///
+    /// Required: must be non-empty
+    #[prost(bytes = "vec", tag = "1")]
+    pub transaction_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The format for the update.
+    ///
     /// Required
     #[prost(message, optional, tag = "2")]
     pub update_format: ::core::option::Option<UpdateFormat>,
@@ -3182,12 +3976,16 @@ pub struct GetUpdateByIdRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetUpdateResponse {
     /// The update that matches the filter in the request.
+    ///
+    /// Required
     #[prost(oneof = "get_update_response::Update", tags = "1, 2, 3")]
     pub update: ::core::option::Option<get_update_response::Update>,
 }
 /// Nested message and enum types in `GetUpdateResponse`.
 pub mod get_update_response {
     /// The update that matches the filter in the request.
+    ///
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Update {
         #[prost(message, tag = "1")]
@@ -3197,6 +3995,83 @@ pub mod get_update_response {
         #[prost(message, tag = "3")]
         TopologyTransaction(super::TopologyTransaction),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetUpdatesPageRequest {
+    /// Exclusive lower bound offset of the requested ledger section (non-negative integer).
+    /// The response page will only contain updates whose offset is strictly greater than this.
+    /// If set to zero or not defined, the lower bound is set to the actual pruning offset or to the beginning of the
+    /// ledger if the participant was not pruned yet.
+    /// If set to positive and the ledger has been pruned, this parameter must be greater or equal than the pruning offset.
+    ///
+    /// Optional
+    #[prost(int64, optional, tag = "1")]
+    pub begin_offset_exclusive: ::core::option::Option<i64>,
+    /// Inclusive upper bound offset of the requested ledger section.
+    /// If specified the response will only contain updates whose offset is less than or equal to this.
+    /// If not specified response will only contain updates whose offset is less than the current ledger-end.
+    ///
+    /// Optional
+    #[prost(int64, optional, tag = "2")]
+    pub end_offset_inclusive: ::core::option::Option<i64>,
+    /// The result page will contain the first max_page_size Updates of all matching updates.
+    /// The server may reject queries with max_page_size above server specified limits.
+    /// If not specified, the default max_page_size is determined by the server.
+    ///
+    /// Optional
+    #[prost(int32, optional, tag = "3")]
+    pub max_page_size: ::core::option::Option<i32>,
+    /// Required
+    #[prost(message, optional, tag = "4")]
+    pub update_format: ::core::option::Option<UpdateFormat>,
+    /// If set, the page will populate the elements in descending order starting from the end_offset_inclusive.
+    ///
+    /// Optional
+    #[prost(bool, tag = "5")]
+    pub descending_order: bool,
+    /// To get the next page of updates, the ``page_token`` should be set to the
+    /// ``next_page_token`` of the last ``GetUpdatesPageResponse``.
+    /// To achieve correct paging: subsequent requests must
+    ///
+    /// - be executed on the same participant,
+    /// - have the same begin_offset_exclusive,
+    /// - have the same end_offset_inclusive,
+    /// - have the same update_format and
+    /// - have the same descending_order.
+    ///
+    /// If not specified, the first page of updates will be returned.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub page_token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetUpdatesPageResponse {
+    /// The first max_page_size updates that match the filter in the request.
+    /// In case descending_order was selected, the order of the updates is in reversed offset order.
+    ///
+    /// Optional: can be empty
+    #[prost(message, repeated, tag = "1")]
+    pub updates: ::prost::alloc::vec::Vec<GetUpdateResponse>,
+    /// Represents the lower bound of this page.
+    ///
+    /// Required
+    #[prost(int64, tag = "2")]
+    pub lowest_page_offset_exclusive: i64,
+    /// Represents the upper bound of the page.
+    ///
+    /// Required
+    #[prost(int64, tag = "3")]
+    pub highest_page_offset_inclusive: i64,
+    /// If the value is not populated, this is the last page.
+    /// If the value is populated, this token can be used to get the next page.
+    /// If the original ``GetFirstUpdatePageRequest`` end_offset_inclusive was not specified and the request uses
+    /// ascending order, then this token will always be populated, so you can use it to "tail" the ledger by
+    /// repeatedly polling with the new page token returned.
+    ///
+    /// Optional: can be empty
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub next_page_token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Generated client implementations.
 pub mod update_service_client {
@@ -3211,7 +4086,7 @@ pub mod update_service_client {
     use tonic::codegen::http::Uri;
     /// Allows clients to read updates (transactions, (un)assignments, topology events) from the ledger.
     ///
-    /// ``GetUpdates`` and ``GetUpdateTrees`` provide a comprehensive stream of updates/changes
+    /// ``GetUpdates`` provides a comprehensive stream of updates/changes
     /// which happened on the virtual shared ledger. These streams are indexed with ledger
     /// offsets, which are strictly increasing.
     /// The virtual shared ledger consist of changes happening on multiple synchronizers which are
@@ -3306,7 +4181,7 @@ pub mod update_service_client {
         /// for individual events depends on the transaction shape chosen.
         ///
         /// - ACS delta: a requesting party must be a stakeholder of an event for it to be included.
-        /// - ledger effects: a requesting party must be a witness of an en event for it to be included.
+        /// - ledger effects: a requesting party must be a witness of an event for it to be included.
         pub async fn get_updates(
             &mut self,
             request: impl tonic::IntoRequest<super::GetUpdatesRequest>,
@@ -3395,19 +4270,90 @@ pub mod update_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Look up an update by its transaction hash.
+        /// This is only available for updates received after upgrading to Canton version 3.6.
+        /// If there is no update with this transaction hash, or all the events are filtered,
+        /// or the update was populated before upgrading to Canton version 3.6, an UPDATE_NOT_FOUND error will be raised.
+        pub async fn get_update_by_hash(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetUpdateByHashRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetUpdateResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.UpdateService/GetUpdateByHash",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.UpdateService",
+                        "GetUpdateByHash",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Read a page of ledger's filtered updates. It returns the event types in accordance with
+        /// the specified contents and filters.
+        /// Additionally, the selection criteria for individual events depends on the transaction shape chosen.
+        ///
+        /// - ACS delta: an event is included only if the requesting party is a stakeholder.
+        /// - ledger effects: an event is included if the requesting party is a witness.
+        pub async fn get_updates_page(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetUpdatesPageRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetUpdatesPageResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.UpdateService/GetUpdatesPage",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.UpdateService",
+                        "GetUpdatesPage",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetContractRequest {
     /// The ID of the contract.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub contract_id: ::prost::alloc::string::String,
     /// The list of querying parties
     /// The stakeholders of the referenced contract must have an intersection with any of these parties
     /// to return the result.
-    /// Optional, if no querying_parties specified, all possible contracts could be returned.
+    /// If no querying_parties specified, all possible contracts could be returned.
+    ///
+    /// Optional: can be empty
     #[prost(string, repeated, tag = "2")]
     pub querying_parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
@@ -3561,25 +4507,52 @@ pub mod contract_service_client {
 pub struct CompletionStreamRequest {
     /// Only completions of commands submitted with the same user_id will be visible in the stream.
     /// Must be a valid UserIdString (as described in ``value.proto``).
+    ///
     /// Required unless authentication is used with a user token.
     /// In that case, the token's user-id will be used for the request's user_id.
+    ///
+    /// Optional
     #[prost(string, tag = "1")]
     pub user_id: ::prost::alloc::string::String,
     /// Non-empty list of parties whose data should be included.
     /// The stream shows only completions of commands for which at least one of the ``act_as`` parties is in the given set of parties.
     /// Must be a valid PartyIdString (as described in ``value.proto``).
-    /// Required
+    ///
+    /// Required: must be non-empty
     #[prost(string, repeated, tag = "2")]
     pub parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// This optional field indicates the minimum offset for completions. This can be used to resume an earlier completion stream.
     /// If not set the ledger uses the ledger begin offset instead.
     /// If specified, it must be a valid absolute offset (positive integer) or zero (ledger begin offset).
     /// If the ledger has been pruned, this parameter must be specified and greater than the pruning offset.
+    ///
+    /// Optional
     #[prost(int64, tag = "3")]
     pub begin_exclusive: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCompletionsRequest {
+    /// If specified, only completions of commands are included, which have at least one of the ``act_as`` parties
+    /// in the given set of parties.
+    /// Only Ledger API users with CanReadAsAnyParty permission allowed to provide no ``parties``.
+    /// Must be a valid PartyIdString (as described in ``value.proto``).
+    ///
+    /// Optional: can be empty
+    #[prost(string, repeated, tag = "1")]
+    pub parties: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// This optional field indicates the minimum offset for completions. This can be used to resume an earlier completion stream.
+    /// If not set the ledger uses the ledger begin offset instead.
+    /// If specified, it must be a valid absolute offset (positive integer) or zero (ledger begin offset).
+    /// If the ledger has been pruned, this parameter must be specified and greater than the pruning offset. (the pruning
+    /// offset is accessible on the StateService.GetLatestPrunedOffsets endpoint)
+    ///
+    /// Optional
+    #[prost(int64, tag = "2")]
+    pub begin_exclusive: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletionStreamResponse {
+    /// Required
     #[prost(oneof = "completion_stream_response::CompletionResponse", tags = "1, 2")]
     pub completion_response: ::core::option::Option<
         completion_stream_response::CompletionResponse,
@@ -3587,6 +4560,7 @@ pub struct CompletionStreamResponse {
 }
 /// Nested message and enum types in `CompletionStreamResponse`.
 pub mod completion_stream_response {
+    /// Required
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CompletionResponse {
         #[prost(message, tag = "1")]
@@ -3594,6 +4568,31 @@ pub mod completion_stream_response {
         #[prost(message, tag = "2")]
         OffsetCheckpoint(super::OffsetCheckpoint),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCompletionByHashRequest {
+    /// The transaction hash of the prepared transaction whose completion is being looked up.
+    ///
+    /// Required: must be non-empty
+    #[prost(bytes = "vec", tag = "1")]
+    pub transaction_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCompletionByHashResponse {
+    /// The accepted completion for the given transaction hash (at most one can exist).
+    /// Only completions beyond the current pruning offset are visible.
+    ///
+    /// Optional
+    #[prost(message, optional, tag = "1")]
+    pub accepted_completion: ::core::option::Option<Completion>,
+    /// Recent rejected completions for the given transaction hash, in descending offset order.
+    /// The server may truncate this list if there are too many entries.
+    /// Use ``submission_id`` to correlate with a specific command submission.
+    /// Only completions beyond the current pruning offset are visible.
+    ///
+    /// Optional: can be empty
+    #[prost(message, repeated, tag = "2")]
+    pub last_rejected_completions: ::prost::alloc::vec::Vec<Completion>,
 }
 /// Generated client implementations.
 pub mod command_completion_service_client {
@@ -3702,6 +4701,7 @@ pub mod command_completion_service_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /// Deprecated: please use ``GetCompletions`` instead.
         /// Subscribe to command completion events.
         pub async fn completion_stream(
             &mut self,
@@ -3732,15 +4732,85 @@ pub mod command_completion_service_client {
                 );
             self.inner.server_streaming(req, path, codec).await
         }
+        /// Subscribe to command completion events.
+        /// This streaming endpoint provides more flexibility in filtering than the predecessor ``CompletionStream``.
+        pub async fn get_completions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetCompletionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::CompletionStreamResponse>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.CommandCompletionService/GetCompletions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.CommandCompletionService",
+                        "GetCompletions",
+                    ),
+                );
+            self.inner.server_streaming(req, path, codec).await
+        }
+        /// Look up a completion by its transaction hash.
+        /// This is only available for completions received after upgrading to Canton version 3.5.
+        /// A COMPLETION_NOT_FOUND error will be raised if either of the following is true:
+        ///
+        /// - there is no completion with this transaction hash,
+        /// - the completion is not visible to the user,
+        /// - the completion was populated before upgrading to Canton version 3.5,
+        /// - respective completions are all pruned.
+        pub async fn get_completion_by_hash(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetCompletionByHashRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetCompletionByHashResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/com.daml.ledger.api.v2.CommandCompletionService/GetCompletionByHash",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "com.daml.ledger.api.v2.CommandCompletionService",
+                        "GetCompletionByHash",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetEventsByContractIdRequest {
     /// The contract id being queried.
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub contract_id: ::prost::alloc::string::String,
     /// Format of the events in the result, the presentation will be of TRANSACTION_SHAPE_ACS_DELTA.
+    ///
     /// Required
     #[prost(message, optional, tag = "3")]
     pub event_format: ::core::option::Option<EventFormat>,
@@ -3749,24 +4819,28 @@ pub struct GetEventsByContractIdRequest {
 pub struct GetEventsByContractIdResponse {
     /// The create event for the contract with the ``contract_id`` given in the request
     /// provided it exists and has not yet been pruned.
+    ///
     /// Optional
     #[prost(message, optional, tag = "1")]
     pub created: ::core::option::Option<Created>,
     /// The archive event for the contract with the ``contract_id`` given in the request
     /// provided such an archive event exists and it has not yet been pruned.
+    ///
     /// Optional
     #[prost(message, optional, tag = "2")]
     pub archived: ::core::option::Option<Archived>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Created {
-    /// Required
     /// The event as it appeared in the context of its original update (i.e. daml transaction or
     /// reassignment) on this participant node. You can use its offset and node_id to find the
     /// corresponding update and the node within it.
+    ///
+    /// Required
     #[prost(message, optional, tag = "1")]
     pub created_event: ::core::option::Option<CreatedEvent>,
     /// The synchronizer which sequenced the creation of the contract
+    ///
     /// Required
     #[prost(string, tag = "2")]
     pub synchronizer_id: ::prost::alloc::string::String,
@@ -3776,8 +4850,9 @@ pub struct Archived {
     /// Required
     #[prost(message, optional, tag = "1")]
     pub archived_event: ::core::option::Option<ArchivedEvent>,
-    /// Required
     /// The synchronizer which sequenced the archival of the contract
+    ///
+    /// Required
     #[prost(string, tag = "2")]
     pub synchronizer_id: ::prost::alloc::string::String,
 }
@@ -3915,6 +4990,7 @@ pub mod event_query_service_client {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitAndWaitRequest {
     /// The commands to be submitted.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub commands: ::core::option::Option<Commands>,
@@ -3923,12 +4999,14 @@ pub struct SubmitAndWaitRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitAndWaitForTransactionRequest {
     /// The commands to be submitted.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub commands: ::core::option::Option<Commands>,
     /// If no ``transaction_format`` is provided, a default will be used where ``transaction_shape`` is set to
     /// TRANSACTION_SHAPE_ACS_DELTA, ``event_format`` is defined with ``filters_by_party`` containing wildcard-template
     /// filter for all original ``act_as`` and ``read_as`` parties and the ``verbose`` flag is set.
+    ///
     /// Optional
     #[prost(message, optional, tag = "2")]
     pub transaction_format: ::core::option::Option<TransactionFormat>,
@@ -3937,10 +5015,12 @@ pub struct SubmitAndWaitForTransactionRequest {
 pub struct SubmitAndWaitResponse {
     /// The id of the transaction that resulted from the submitted command.
     /// Must be a valid LedgerString (as described in ``value.proto``).
+    ///
     /// Required
     #[prost(string, tag = "1")]
     pub update_id: ::prost::alloc::string::String,
     /// The details of the offset field are described in ``community/ledger-api/README.md``.
+    ///
     /// Required
     #[prost(int64, tag = "2")]
     pub completion_offset: i64,
@@ -3949,6 +5029,7 @@ pub struct SubmitAndWaitResponse {
 pub struct SubmitAndWaitForTransactionResponse {
     /// The transaction that resulted from the submitted command.
     /// The transaction might contain no events (request conditions result in filtering out all of them).
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub transaction: ::core::option::Option<Transaction>,
@@ -3957,12 +5038,14 @@ pub struct SubmitAndWaitForTransactionResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitAndWaitForReassignmentRequest {
     /// The reassignment commands to be submitted.
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub reassignment_commands: ::core::option::Option<ReassignmentCommands>,
-    /// Optional
     /// If no event_format provided, the result will contain no events.
     /// The events in the result, will take shape TRANSACTION_SHAPE_ACS_DELTA.
+    ///
+    /// Optional
     #[prost(message, optional, tag = "2")]
     pub event_format: ::core::option::Option<EventFormat>,
 }
@@ -3970,6 +5053,7 @@ pub struct SubmitAndWaitForReassignmentRequest {
 pub struct SubmitAndWaitForReassignmentResponse {
     /// The reassignment that resulted from the submitted reassignment command.
     /// The reassignment might contain no events (request conditions result in filtering out all of them).
+    ///
     /// Required
     #[prost(message, optional, tag = "1")]
     pub reassignment: ::core::option::Option<Reassignment>,
